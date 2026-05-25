@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary-container: #3d0c02;
+  --color-secondary-container: #feb234;
+  --color-surface: #fef9f2;
+  --color-surface-container: #f2ede6;
+  --color-on-surface: #1d1c18;
+  --color-on-surface-variant: #54433f;
+}
+
+body {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
