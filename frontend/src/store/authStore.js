@@ -1,5 +1,7 @@
+// src/store/authStore.js
 import { create } from "zustand";
 import api from "../services/api";
+import { useSessionStore } from "./sessionStore";
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -7,14 +9,15 @@ export const useAuthStore = create((set) => ({
 
   login: async (email, password) => {
     const response = await api.post("/api/auth/login", { email, password });
-
-    
     const { accessToken, user } = response.data.data;
 
-    
-    window.__accessToken = accessToken;
+    window.accessToken = accessToken;
 
-    set({ user, isAuthenticated: true });
+    set({
+      user,
+      isAuthenticated: true,
+    });
+
     return user;
   },
 
@@ -22,11 +25,21 @@ export const useAuthStore = create((set) => ({
     try {
       await api.post("/api/auth/logout");
     } catch {
-      
+      // ignore logout API error
     }
-    window.__accessToken = null;
-    set({ user: null, isAuthenticated: false });
+
+    window.accessToken = null;
+    useSessionStore.getState().clearTodaySession();
+
+    set({
+      user: null,
+      isAuthenticated: false,
+    });
   },
 
-  setUser: (user) => set({ user, isAuthenticated: true }),
+  setUser: (user) =>
+    set({
+      user,
+      isAuthenticated: true,
+    }),
 }));

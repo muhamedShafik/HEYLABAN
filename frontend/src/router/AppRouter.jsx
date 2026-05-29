@@ -1,10 +1,11 @@
+// src/router/AppRouter.jsx
 import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import POSPage from "../pages/POSPage";
+import OpenSalesPage from "../pages/OpenSalesPage";
 
-// blocks access if no access token in memory
 function ProtectedRoute({ children }) {
-  const isAuthenticated = !!window.__accessToken;
+  const isAuthenticated = !!window.accessToken;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -19,7 +20,15 @@ function AppRouter() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
 
-      {/* protected — only accessible when logged in */}
+      <Route
+        path="/open-sales"
+        element={
+          <ProtectedRoute>
+            <OpenSalesPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/pos"
         element={
