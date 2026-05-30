@@ -6,24 +6,50 @@ import PaymentModal from "../components/pos/PaymentModal";
 import { useCartStore } from "../store/cartStore";
 import { useSessionStore } from "../store/sessionStore";
 import { fetchCatalogue } from "../services/catalogueService";
+import { createOrder, updateOrder } from "../services/orderService";
+import { createKot } from "../services/kotService";
+import { createOrderPayment } from "../services/paymentService";
 
 function POSPage() {
   const navigate = useNavigate();
+
+  const [toast, setToast] = useState(null);
+
+  const [kotLoading, setKotLoading] = useState(false);
+  const [lastKot, setLastKot] = useState(null);
+  const [isCartDirty, setIsCartDirty] = useState(false);
+
+  const [showOrderNote, setShowOrderNote] = useState(false);
+
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [lastSavedOrder, setLastSavedOrder] = useState(null);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showCloseSaleModal, setShowCloseSaleModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+
+  const [showDiscountEditor, setShowDiscountEditor] = useState(false);
+  const [discountInput, setDiscountInput] = useState("");
+
   const [closingNote, setClosingNote] = useState("");
-  const [expenses, setExpenses] = useState([{ categoryName: "", amount: "", note: "" }]);
+  const [expenses, setExpenses] = useState([
+    { categoryName: "", amount: "", note: "" },
+  ]);
   const [closeLoading, setCloseLoading] = useState(false);
   const [closeError, setCloseError] = useState("");
 
   const todaySession = useSessionStore((state) => state.todaySession);
   const fetchTodaySession = useSessionStore((state) => state.fetchTodaySession);
   const closeSession = useSessionStore((state) => state.closeSession);
+  const discountAmount = useCartStore((state) => state.discountAmount);
+  const setDiscountAmount = useCartStore((state) => state.setDiscountAmount);
 
+  const orderType = useCartStore((state) => state.orderType);
+  const orderNote = useCartStore((state) => state.orderNote);
+  const setOrderType = useCartStore((state) => state.setOrderType);
+  const setOrderNote = useCartStore((state) => state.setOrderNote);
   const addToCart = useCartStore((state) => state.addToCart);
   const increaseQty = useCartStore((state) => state.increaseQty);
   const decreaseQty = useCartStore((state) => state.decreaseQty);
@@ -38,6 +64,12 @@ function POSPage() {
     queryFn: fetchCatalogue,
     staleTime: 5 * 60 * 1000,
   });
+
+  useEffect(() => {
+    if (showDiscountEditor) {
+      setDiscountInput(String(discountAmount || ""));
+    }
+  }, [showDiscountEditor, discountAmount]);
 
   useEffect(() => {
     if (categories.length > 0 && !selectedCategoryId) {
@@ -61,9 +93,25 @@ function POSPage() {
     ensureSession();
   }, [todaySession, fetchTodaySession, navigate]);
 
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const cartItems = useMemo(() => getCartItems(), [products, getCartItems]);
   const subtotal = useMemo(() => getSubtotal(), [products, getSubtotal]);
   const total = useMemo(() => getTotal(), [products, getTotal]);
+
+  useEffect(() => {
+    if (lastSavedOrder?.id) {
+      setIsCartDirty(true);
+    }
+  }, [cartItems, orderType, orderNote, discountAmount]);
 
   const visibleProducts = useMemo(() => {
     if (searchQuery.trim()) {
@@ -95,8 +143,24 @@ function POSPage() {
     return numeric.toFixed(2);
   };
 
+  const showToast = ({ type = "success", title, message }) => {
+    setToast({
+      id: Date.now(),
+      type,
+      title,
+      message,
+    });
+  };
+
+  const clearToast = () => {
+    setToast(null);
+  };
+
   const handleAddExpenseRow = () => {
-    setExpenses((prev) => [...prev, { categoryName: "", amount: "", note: "" }]);
+    setExpenses((prev) => [
+      ...prev,
+      { categoryName: "", amount: "", note: "" },
+    ]);
   };
 
   const handleRemoveExpenseRow = (index) => {
@@ -109,6 +173,15 @@ function POSPage() {
         i === index ? { ...expense, [field]: value } : expense
       )
     );
+  };
+
+  const resetCurrentOrderFlow = () => {
+    clearCart();
+    setLastSavedOrder(null);
+    setLastKot(null);
+    setIsCartDirty(false);
+    setShowOrderNote(false);
+    setOrderNote("");
   };
 
   const resetCloseModal = () => {
@@ -140,8 +213,14 @@ function POSPage() {
         return;
       }
 
-      if (expense.amount === "" || Number.isNaN(expense.amount) || expense.amount < 0) {
-        setCloseError(`Valid amount is required for ${expense.categoryName || "expense"}.`);
+      if (
+        expense.amount === "" ||
+        Number.isNaN(expense.amount) ||
+        expense.amount < 0
+      ) {
+        setCloseError(
+          `Valid amount is required for ${expense.categoryName || "expense"}.`
+        );
         return;
       }
     }
@@ -154,7 +233,7 @@ function POSPage() {
         expenses: cleanedExpenses,
       });
 
-      clearCart();
+      resetCurrentOrderFlow();
       resetCloseModal();
       navigate("/open-sales", { replace: true });
     } catch (err) {
@@ -166,12 +245,181 @@ function POSPage() {
     }
   };
 
+  // Cart dirty tracking is consolidated in the useEffect above
+
+  const buildOrderPayload = () => ({
+    orderType,
+    note: orderNote.trim() || null,
+    discountAmount: Number(discountAmount || 0),
+    items: cartItems.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      note: item.note?.trim() || null,
+    })),
+  });
+  const ensureOrderForCart = async () => {
+    if (cartItems.length === 0) {
+      throw new Error("Please add at least one item.");
+    }
+
+    const payload = buildOrderPayload();
+
+    if (!lastSavedOrder?.id) {
+      const createdOrder = await createOrder(payload);
+      setLastSavedOrder(createdOrder);
+      setIsCartDirty(false);
+      return createdOrder;
+    }
+
+    if (!isCartDirty) {
+      return lastSavedOrder;
+    }
+
+    const updatedOrder = await updateOrder(lastSavedOrder.id, payload);
+    setLastSavedOrder(updatedOrder);
+    setIsCartDirty(false);
+    return updatedOrder;
+  };
+
+  const handleSaveOrder = async () => {
+    setLastKot(null);
+
+    if (cartItems.length === 0) {
+      showToast({
+        type: "error",
+        title: "Cart empty",
+        message: "Add at least one item before saving the order.",
+      });
+      return;
+    }
+
+    try {
+      setSaveLoading(true);
+
+      const isNewOrder = !lastSavedOrder?.id;
+      const order = await ensureOrderForCart();
+
+      setLastSavedOrder(order);
+      setIsCartDirty(false);
+
+      showToast({
+        type: "success",
+        title: isNewOrder ? "Order saved" : "Order updated",
+        message: `${order.orderNo} • Token #${order.tokenNo}`,
+      });
+    } catch (err) {
+      const message =
+        err?.response?.data?.message || err?.message || "Failed to save order.";
+
+      showToast({
+        type: "error",
+        title: "Save failed",
+        message,
+      });
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handlePrintKOT = async () => {
+    setLastKot(null);
+
+    if (cartItems.length === 0 && !lastSavedOrder?.id) {
+      showToast({
+        type: "error",
+        title: "Cart empty",
+        message: "Please add items before printing KOT.",
+      });
+      return;
+    }
+
+    try {
+      setKotLoading(true);
+
+      const order = await ensureOrderForCart();
+
+      const kot = await createKot(order.id, {
+        note: orderNote.trim() || null,
+      });
+
+      setLastSavedOrder(order);
+      setLastKot(kot);
+      setIsCartDirty(false);
+
+      showToast({
+        type: "success",
+        title: kot.status === "REPRINTED" ? "KOT reprinted" : "KOT printed",
+        message: `${kot.kotNo} • Times printed: ${kot.timesPrinted}`,
+      });
+    } catch (err) {
+      const message =
+        err?.response?.data?.message || err?.message || "Failed to print KOT.";
+
+      showToast({
+        type: "error",
+        title: "KOT failed",
+        message,
+      });
+    } finally {
+      setKotLoading(false);
+    }
+  };
+
+
+  // payment section
+
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
+ const handleConfirmPayment = async ({ payments }) => {
+  try {
+    setPaymentLoading(true);
+
+    const order = await ensureOrderForCart();
+
+    console.log("ORDER:", order);
+    console.log("PAYMENTS:", payments);
+
+    const response = await createOrderPayment(order.id, { payments });
+
+    console.log("PAYMENT RESPONSE:", response);
+
+    showToast({
+      type: "success",
+      title: "Payment completed",
+      message: `${response.orderNo || order.orderNo} paid successfully.`,
+    });
+
+    resetCurrentOrderFlow();
+    setShowPaymentModal(false);
+    return response;
+  } catch (err) {
+    console.log("PAYMENT ERROR FULL:", err?.response?.data);
+
+    const message =
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.message ||
+      "Failed to complete payment.";
+
+    showToast({
+      type: "error",
+      title: "Payment failed",
+      message,
+    });
+
+    throw err;
+  } finally {
+    setPaymentLoading(false);
+  }
+};
   return (
     <>
       <div className="flex h-screen flex-col overflow-hidden bg-[#fef9f2] text-[#3d0c02]">
         <header className="flex h-[56px] shrink-0 items-center justify-between bg-[#3d0c02] px-6 text-white">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-extrabold tracking-tight">Confectionery POS</h1>
+            <h1 className="text-xl font-extrabold tracking-tight">
+              Confectionery POS
+            </h1>
 
             <span className="border-l border-white/20 pl-4 text-sm opacity-60">
               {todaySession?.date
@@ -204,18 +452,28 @@ function POSPage() {
               </span>
             )}
 
-            <button className="opacity-80">↺</button>
-            <button className="opacity-80">⚙</button>
-            <button className="opacity-80">👤</button>
+            <button type="button" className="opacity-80">
+              ↺
+            </button>
+            <button type="button" className="opacity-80">
+              ⚙
+            </button>
+            <button type="button" className="opacity-80">
+              👤
+            </button>
 
             <button
+              type="button"
               onClick={() => setShowCloseSaleModal(true)}
               className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700"
             >
               Close Sale
             </button>
 
-            <button className="rounded-lg border border-white/30 px-6 py-2 text-sm font-bold">
+            <button
+              type="button"
+              className="rounded-lg border border-white/30 px-6 py-2 text-sm font-bold"
+            >
               Orders
             </button>
           </div>
@@ -245,16 +503,16 @@ function POSPage() {
                 ) : (
                   categories.map((category) => (
                     <button
+                      type="button"
                       key={category.id}
                       onClick={() => {
                         setSelectedCategoryId(category.id);
                         setSearchQuery("");
                       }}
-                      className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${
-                        selectedCategoryId === category.id
+                      className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${selectedCategoryId === category.id
                           ? "bg-[#E8A020] text-white shadow-md"
                           : "border border-[#ded9d3] bg-white text-[#3d0c02]"
-                      }`}
+                        }`}
                     >
                       {category.name}
                     </button>
@@ -287,6 +545,7 @@ function POSPage() {
               {!isLoading &&
                 visibleProducts.map((product) => (
                   <button
+                    type="button"
                     key={product.id}
                     onClick={() => addToCart(product.id, product)}
                     className="relative flex aspect-square flex-col items-center justify-center gap-4 rounded-2xl bg-white p-6 text-center shadow-[0_4px_12px_rgba(61,12,2,0.08)] active:scale-[0.97]"
@@ -298,9 +557,13 @@ function POSPage() {
                     )}
 
                     <div>
-                      <h3 className="text-lg font-bold leading-tight">{product.name}</h3>
+                      <h3 className="text-lg font-bold leading-tight">
+                        {product.name}
+                      </h3>
                       {product.description && (
-                        <p className="mt-1 text-xs text-[#3d0c02]/50">{product.description}</p>
+                        <p className="mt-1 text-xs text-[#3d0c02]/50">
+                          {product.description}
+                        </p>
                       )}
                       <p className="mt-2 font-bold text-[#E8A020]">
                         ₹{formatMoney(product.price)}
@@ -314,20 +577,81 @@ function POSPage() {
           <section className="flex w-[40%] flex-col bg-white">
             <div className="border-b border-[#ded9d3] bg-[#f8f3ec]/50 p-4">
               <div className="flex items-center overflow-hidden rounded-xl border border-[#ded9d3] bg-white">
-                <button className="flex-1 bg-[#E8A020] py-3 text-sm font-bold text-white">Dine in</button>
+                <button
+                  type="button"
+                  onClick={() => setOrderType("DINE_IN")}
+                  className={`flex-1 py-3 text-sm font-bold ${orderType === "DINE_IN"
+                      ? "bg-[#E8A020] text-white"
+                      : "text-[#3d0c02]/70"
+                    }`}
+                >
+                  Dine in
+                </button>
+
                 <div className="h-6 w-px bg-[#ded9d3]" />
-                <button className="flex-1 py-3 text-sm font-semibold text-[#3d0c02]/70">Delivery</button>
+
+                <button
+                  type="button"
+                  onClick={() => setOrderType("DELIVERY")}
+                  className={`flex-1 py-3 text-sm font-bold ${orderType === "DELIVERY"
+                      ? "bg-[#E8A020] text-white"
+                      : "text-[#3d0c02]/70"
+                    }`}
+                >
+                  Delivery
+                </button>
+
                 <div className="h-6 w-px bg-[#ded9d3]" />
-                <button className="flex-1 py-3 text-sm font-semibold text-[#3d0c02]/70">Takeout</button>
+
+                <button
+                  type="button"
+                  onClick={() => setOrderType("TAKEOUT")}
+                  className={`flex-1 py-3 text-sm font-bold ${orderType === "TAKEOUT"
+                      ? "bg-[#E8A020] text-white"
+                      : "text-[#3d0c02]/70"
+                    }`}
+                >
+                  Takeout
+                </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between border-b border-[#ded9d3] p-6">
-              <h2 className="text-2xl font-bold">Cart ({totalCartQty})</h2>
-              <button onClick={clearCart} className="text-sm font-bold text-red-600">
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold">Cart ({totalCartQty})</h2>
+
+                <button
+                  type="button"
+                  onClick={() => setShowOrderNote((prev) => !prev)}
+                  className="text-sm font-bold text-[#E8A020]"
+                >
+                  {showOrderNote || orderNote.trim() ? "✎ Add Note" : "✎ Add Note"}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={resetCurrentOrderFlow}
+                className="text-sm font-bold text-red-600"
+              >
                 Clear All
               </button>
             </div>
+
+            {showOrderNote && (
+              <div className="border-b border-[#ded9d3] bg-white p-4">
+                <label className="mb-2 block text-sm font-bold text-[#3d0c02]">
+                  Order Note
+                </label>
+                <textarea
+                  rows="2"
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value)}
+                  placeholder="Example: No onion, urgent order..."
+                  className="w-full rounded-xl border border-[#ded9d3] bg-[#fef9f2] p-3 text-sm outline-none focus:border-[#E8A020]"
+                />
+              </div>
+            )}
 
             <div className="flex-1 space-y-4 overflow-y-auto bg-[#f8f3ec]/30 p-4">
               {cartItems.length === 0 ? (
@@ -342,24 +666,37 @@ function POSPage() {
                   >
                     <div className="mb-3 flex items-start justify-between">
                       <div>
-                        <h4 className="text-lg font-bold leading-tight">{item.name}</h4>
-                        <p className="mt-1 text-sm text-gray-500">{item.description}</p>
+                        <h4 className="text-lg font-bold leading-tight">
+                          {item.name}
+                        </h4>
+                        {item.description ? (
+                          <p className="mt-1 text-sm text-gray-500">
+                            {item.description}
+                          </p>
+                        ) : null}
                       </div>
-                      <span className="text-lg font-bold">₹{formatMoney(item.total)}</span>
+
+                      <span className="text-lg font-bold">
+                        ₹{formatMoney(item.total)}
+                      </span>
                     </div>
 
                     <div className="flex justify-end">
                       <div className="flex items-center gap-4 rounded-lg border border-[#ded9d3] bg-[#fef9f2] p-1">
                         <button
+                          type="button"
                           onClick={() => decreaseQty(item.id)}
-                          className="h-10 w-10 rounded-md border border-[#ded9d3] bg-white"
+                          className="flex h-10 w-10 items-center justify-center rounded-md border border-[#ded9d3] bg-white"
                         >
                           −
                         </button>
-                        <span className="w-6 text-center text-xl font-bold">{item.quantity}</span>
+                        <span className="w-6 text-center text-xl font-bold">
+                          {item.quantity}
+                        </span>
                         <button
+                          type="button"
                           onClick={() => increaseQty(item.id)}
-                          className="h-10 w-10 rounded-md border border-[#ded9d3] bg-white"
+                          className="flex h-10 w-10 items-center justify-center rounded-md border border-[#ded9d3] bg-white"
                         >
                           +
                         </button>
@@ -372,14 +709,83 @@ function POSPage() {
 
             <div className="border-t border-[#ded9d3] bg-white p-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
               <div className="mb-6 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="opacity-70">Order Type</span>
+                  <span className="font-bold">{orderType.replace("_", " ")}</span>
+                </div>
+
                 <div className="flex justify-between text-lg">
                   <span className="opacity-70">Subtotal</span>
                   <span>₹{formatMoney(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-lg">
-                  <span className="opacity-70">Discount</span>
-                  <span>₹0.00</span>
+
+                <div className="flex items-center justify-between text-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="opacity-70">Discount</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscountEditor((prev) => !prev)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-[#ded9d3] bg-[#f8f3ec] text-sm text-[#3d0c02]"
+                      title="Edit discount"
+                    >
+                      ✎
+                    </button>
+                  </div>
+
+                  <span className="font-semibold text-green-700">
+                    -₹{formatMoney(discountAmount)}
+                  </span>
                 </div>
+
+                {showDiscountEditor && (
+                  <div className="rounded-xl border border-[#ded9d3] bg-[#f8f3ec] p-3">
+                    <label className="mb-2 block text-sm font-bold text-[#3d0c02]">
+                      Discount Amount
+                    </label>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)}
+                        placeholder="Enter discount"
+                        className="h-11 flex-1 rounded-xl border border-[#ded9d3] bg-white px-3 outline-none focus:border-[#E8A020]"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextDiscount = Math.min(
+                            Number(discountInput || 0),
+                            Number(subtotal || 0)
+                          );
+                          setDiscountAmount(nextDiscount);
+                          setShowDiscountEditor(false);
+                        }}
+                        className="rounded-xl bg-[#E8A020] px-4 font-bold text-white"
+                      >
+                        Save
+                      </button>
+                    </div>
+
+                    {discountAmount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDiscountAmount(0);
+                          setDiscountInput("");
+                          setShowDiscountEditor(false);
+                        }}
+                        className="mt-2 text-sm font-bold text-red-600"
+                      >
+                        Remove discount
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between border-t border-dashed border-[#ded9d3] pt-4">
                   <span className="text-2xl font-bold">Total</span>
                   <span className="text-4xl font-extrabold text-[#3d0c02]">
@@ -389,21 +795,41 @@ function POSPage() {
               </div>
 
               <div className="flex flex-col gap-4">
-                <button className="flex h-[64px] w-full items-center justify-center gap-3 rounded-xl border-2 border-[#3d0c02] text-xl font-bold">
-                  Print KOT
+                <button
+                  type="button"
+                  onClick={handlePrintKOT}
+                  disabled={(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading}
+                  className={`flex h-[64px] w-full items-center justify-center gap-3 rounded-xl border-2 text-xl font-bold ${(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading
+                      ? "cursor-not-allowed border-gray-300 text-gray-400"
+                      : "border-[#3d0c02] text-[#3d0c02]"
+                    }`}
+                >
+                  {kotLoading ? "Printing KOT..." : "Print KOT"}
                 </button>
+
                 <div className="flex h-[72px] gap-3">
                   <button
+                    type="button"
                     onClick={() => setShowPaymentModal(true)}
                     disabled={cartItems.length === 0}
-                    className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${
-                      cartItems.length === 0 ? "cursor-not-allowed bg-gray-300" : "bg-[#E8A020]"
-                    }`}
+                    className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cartItems.length === 0
+                        ? "cursor-not-allowed bg-gray-300"
+                        : "bg-[#E8A020]"
+                      }`}
                   >
                     Collect Payment
                   </button>
-                  <button className="flex-1 rounded-xl bg-green-600 text-lg font-extrabold text-white shadow-lg">
-                    Save
+
+                  <button
+                    type="button"
+                    onClick={handleSaveOrder}
+                    disabled={cartItems.length === 0 || saveLoading}
+                    className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cartItems.length === 0 || saveLoading
+                        ? "cursor-not-allowed bg-gray-300"
+                        : "bg-green-600"
+                      }`}
+                  >
+                    {saveLoading ? "Saving..." : "Save"}
                   </button>
                 </div>
               </div>
@@ -416,7 +842,9 @@ function POSPage() {
             <div className="w-full max-w-[640px] rounded-2xl border border-[#ded9d3] bg-[#fef9f2] shadow-2xl">
               <div className="flex flex-col gap-6 p-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-[#3d0c02]">Close Sale for Today?</h2>
+                  <h2 className="text-2xl font-bold text-[#3d0c02]">
+                    Close Sale for Today?
+                  </h2>
                   <p className="mt-1 text-sm text-[#54433f]">
                     Review summary, add note and expenses, then confirm.
                   </p>
@@ -429,7 +857,9 @@ function POSPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Opening Cash</span>
-                    <span className="font-bold">₹{formatMoney(todaySession?.openingCash)}</span>
+                    <span className="font-bold">
+                      ₹{formatMoney(todaySession?.openingCash)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Cart Items</span>
@@ -530,17 +960,20 @@ function POSPage() {
 
                 <div className="flex gap-3">
                   <button
+                    type="button"
                     onClick={resetCloseModal}
                     className="h-14 flex-1 rounded-xl border-2 border-[#ded9d3] font-bold text-[#3d0c02]"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleConfirmCloseSale}
                     disabled={closeLoading}
-                    className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${
-                      closeLoading ? "cursor-not-allowed bg-gray-400" : "bg-red-600"
-                    }`}
+                    className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${closeLoading
+                        ? "cursor-not-allowed bg-gray-400"
+                        : "bg-red-600"
+                      }`}
                   >
                     {closeLoading ? "Closing..." : "Confirm & Close Sale"}
                   </button>
@@ -550,7 +983,55 @@ function POSPage() {
           </div>
         )}
 
-        <PaymentModal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} />
+        {toast ? (
+          <div className="pointer-events-none fixed right-6 top-20 z-[200]">
+            <div
+              className={`pointer-events-auto min-w-[320px] max-w-[420px] rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur-sm transition-all ${toast.type === "success"
+                  ? "border-emerald-200 bg-white text-[#3d0c02]"
+                  : "border-red-200 bg-white text-[#3d0c02]"
+                }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${toast.type === "success"
+                      ? "bg-emerald-100 text-emerald-600"
+                      : "bg-red-100 text-red-600"
+                    }`}
+                >
+                  {toast.type === "success" ? "✓" : "!"}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-extrabold">{toast.title}</h4>
+                  <p className="mt-1 text-sm text-[#54433f]">{toast.message}</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={clearToast}
+                  className="text-lg leading-none text-[#3d0c02]/50 hover:text-[#3d0c02]"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#f3eee8]">
+                <div
+                  className={`h-full animate-[toastShrink_3s_linear_forwards] rounded-full ${toast.type === "success" ? "bg-emerald-500" : "bg-red-500"
+                    }`}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <PaymentModal
+          open={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onConfirm={handleConfirmPayment}
+          loading={paymentLoading}
+          total={total}
+        />
       </div>
     </>
   );

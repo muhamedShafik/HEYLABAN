@@ -11,7 +11,14 @@
   --color-on-surface: #1d1c18;
   --color-on-surface-variant: #54433f;
 }
-
+@keyframes toastShrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
 html,
 body {
   margin: 0;

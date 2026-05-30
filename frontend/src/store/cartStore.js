@@ -1,14 +1,25 @@
+// src/store/cartStore.js
 import { create } from "zustand";
 
 export const useCartStore = create((set, get) => ({
-  // cart items keyed by product id
   products: {},
   paymentMethod: "cash",
   cashReceived: "",
+  orderType: "DINE_IN",
+  orderNote: "",
+  discountAmount: 0,
 
   setPaymentMethod: (method) => set({ paymentMethod: method }),
-
   setCashReceived: (value) => set({ cashReceived: value }),
+  setOrderType: (type) => set({ orderType: type }),
+  setOrderNote: (value) => set({ orderNote: value }),
+
+  setDiscountAmount: (value) =>
+    set({
+      discountAmount: Math.max(0, Number(value) || 0),
+    }),
+
+  clearDiscount: () => set({ discountAmount: 0 }),
 
   addToCart: (productId, product) => {
     set((state) => {
@@ -24,10 +35,12 @@ export const useCartStore = create((set, get) => ({
               }
             : {
                 id: product.id,
+                productId: product.id,
                 name: product.name,
                 description: product.description || "",
                 price: Number(product.price),
                 qty: 1,
+                note: "",
               },
         },
       };
@@ -72,18 +85,42 @@ export const useCartStore = create((set, get) => ({
       };
     }),
 
-  clearCart: () => set({ products: {} }),
+  setItemNote: (productId, note) =>
+    set((state) => {
+      const existing = state.products[productId];
+      if (!existing) return state;
+
+      return {
+        products: {
+          ...state.products,
+          [productId]: {
+            ...existing,
+            note,
+          },
+        },
+      };
+    }),
+
+  clearCart: () =>
+    set({
+      products: {},
+      orderType: "DINE_IN",
+      orderNote: "",
+      discountAmount: 0,
+    }),
 
   getCartItems: () => {
     const { products } = get();
 
     return Object.values(products).map((product) => ({
       id: product.id,
+      productId: product.productId,
       name: product.name,
       description: product.description || "",
       total: product.qty * product.price,
       quantity: product.qty,
       price: product.price,
+      note: product.note || "",
     }));
   },
 
@@ -97,7 +134,9 @@ export const useCartStore = create((set, get) => ({
   },
 
   getTotal: () => {
-    return get().getSubtotal();
+    const subtotal = get().getSubtotal();
+    const discount = Number(get().discountAmount || 0);
+    return Math.max(0, subtotal - discount);
   },
 
   getChange: () => {
@@ -111,5 +150,8 @@ export const useCartStore = create((set, get) => ({
       products: {},
       paymentMethod: "cash",
       cashReceived: "",
+      orderType: "DINE_IN",
+      orderNote: "",
+      discountAmount: 0,
     }),
 }));
