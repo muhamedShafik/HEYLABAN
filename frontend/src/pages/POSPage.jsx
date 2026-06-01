@@ -9,7 +9,10 @@ import { fetchCatalogue } from "../services/catalogueService";
 import { createOrder, updateOrder } from "../services/orderService";
 import { createKot } from "../services/kotService";
 import { createOrderPayment } from "../services/paymentService";
-
+import { useQueryClient } from "@tanstack/react-query";
+import { useDebouncedValue } from "../hooks/orders/useDebouncedValue";
+import { useTicketSearchQuery } from "../hooks/orders/useTicketSearchQuery";
+import OrdersSearchDropdown from "../components/orders/OrdersSearchDropdown"
 function POSPage() {
   const navigate = useNavigate();
 
@@ -258,29 +261,43 @@ function POSPage() {
     })),
   });
   const ensureOrderForCart = async () => {
-    if (cartItems.length === 0) {
-      throw new Error("Please add at least one item.");
-    }
+  if (cartItems.length === 0) {
+    throw new Error("Please add at least one item.");
+  }
 
-    const payload = buildOrderPayload();
+  const payload = buildOrderPayload();
 
-    if (!lastSavedOrder?.id) {
-      const createdOrder = await createOrder(payload);
-      setLastSavedOrder(createdOrder);
-      setIsCartDirty(false);
-      return createdOrder;
-    }
-
-    if (!isCartDirty) {
-      return lastSavedOrder;
-    }
-
-    const updatedOrder = await updateOrder(lastSavedOrder.id, payload);
-    setLastSavedOrder(updatedOrder);
+  if (!lastSavedOrder?.id) {
+    const createdOrder = await createOrder(payload);
+    setLastSavedOrder(createdOrder);
     setIsCartDirty(false);
-    return updatedOrder;
-  };
 
+    queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+    if (createdOrder?.id) {
+      queryClient.setQueryData(["order", createdOrder.id], createdOrder);
+    }
+
+    return createdOrder;
+  }
+
+  if (!isCartDirty) {
+    return lastSavedOrder;
+  }
+
+  const updatedOrder = await updateOrder(lastSavedOrder.id, payload);
+  setLastSavedOrder(updatedOrder);
+  setIsCartDirty(false);
+
+  queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+  if (updatedOrder?.id) {
+    queryClient.setQueryData(["order", updatedOrder.id], updatedOrder);
+    queryClient.invalidateQueries({ queryKey: ["order", updatedOrder.id] });
+  }
+
+  return updatedOrder;
+};
   const handleSaveOrder = async () => {
     setLastKot(null);
 
@@ -301,6 +318,13 @@ function POSPage() {
 
       setLastSavedOrder(order);
       setIsCartDirty(false);
+
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+      if (order?.id) {
+        queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+        queryClient.setQueryData(["order", order.id], order);
+      }
 
       showToast({
         type: "success",
@@ -346,6 +370,12 @@ function POSPage() {
       setLastKot(kot);
       setIsCartDirty(false);
 
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+      if (order?.id) {
+        queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+      }
+
       showToast({
         type: "success",
         title: kot.status === "REPRINTED" ? "KOT reprinted" : "KOT printed",
@@ -381,6 +411,12 @@ function POSPage() {
 
     const response = await createOrderPayment(order.id, { payments });
 
+    queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+    if (order?.id) {
+      queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+    }
+
     console.log("PAYMENT RESPONSE:", response);
 
     showToast({
@@ -412,6 +448,58 @@ function POSPage() {
     setPaymentLoading(false);
   }
 };
+
+  // seacrh and orders section
+
+  const [orderSearch, setOrderSearch] = useState("");
+  const [kotSearch, setKotSearch] = useState("");
+
+  const debouncedOrder = useDebouncedValue(orderSearch, 300);
+  const debouncedKot = useDebouncedValue(kotSearch, 300);
+
+  const normalizedOrderQuery =
+    debouncedOrder.trim().toUpperCase().startsWith("ORD-")
+      ? debouncedOrder.trim().toUpperCase()
+      : "";
+
+  const normalizedKotQuery =
+    debouncedKot.trim().toUpperCase().startsWith("KOT-")
+      ? debouncedKot.trim().toUpperCase()
+      : "";
+
+  const orderSearchQuery = useTicketSearchQuery(normalizedOrderQuery, !!normalizedOrderQuery);
+  const kotSearchQuery = useTicketSearchQuery(normalizedKotQuery, !!normalizedKotQuery);
+
+  const handleTicketSelect = (result) => {
+    if (result.type === "ORDER") {
+      navigate(
+        `/orders?selectedOrderId=${result.data.id}&selectedOrderNo=${result.data.orderNo}&search=${result.data.orderNo}`
+      );
+      return;
+    }
+
+    navigate(
+      `/orders?selectedOrderId=${result.data.order.id}&selectedOrderNo=${result.data.order.orderNo}&selectedKotNo=${result.data.kotNo}&search=${result.data.order.orderNo}`
+    );
+  };
+
+  const queryClient = useQueryClient();
+
+  const goToOrdersPage = () => {
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "20",
+      sortBy: "createdAt",
+      sortDir: "DESC",
+    });
+
+    if (lastSavedOrder?.id) {
+      params.set("selectedOrderId", lastSavedOrder.id);
+      params.set("selectedOrderNo", lastSavedOrder.orderNo);
+    }
+
+    navigate(`/orders?${params.toString()}`);
+  };
   return (
     <>
       <div className="flex h-screen flex-col overflow-hidden bg-[#fef9f2] text-[#3d0c02]">
@@ -427,18 +515,49 @@ function POSPage() {
                 : "Today"}
             </span>
 
-            <div className="ml-4 flex items-center gap-2">
-              <input
-                className="h-8 w-32 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-                placeholder="Search KOT"
-                type="text"
-              />
-              <input
-                className="h-8 w-32 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-                placeholder="Search Order"
-                type="text"
-              />
-            </div>
+           <div className="ml-4 flex items-center gap-2">
+  <div className="relative w-40">
+    <input
+      value={kotSearch}
+      onChange={(e) => setKotSearch(e.target.value)}
+      className="h-8 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+      placeholder="Search KOT"
+      type="text"
+    />
+
+    <OrdersSearchDropdown
+      open={!!kotSearch.trim()}
+      loading={kotSearchQuery.isLoading}
+      result={kotSearchQuery.data}
+      error={kotSearchQuery.isError}
+      onSelect={(result) => {
+        handleTicketSelect(result);
+        setKotSearch("");
+      }}
+    />
+  </div>
+
+  <div className="relative w-40">
+    <input
+      value={orderSearch}
+      onChange={(e) => setOrderSearch(e.target.value)}
+      className="h-8 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+      placeholder="Search Order"
+      type="text"
+    />
+
+    <OrdersSearchDropdown
+      open={!!orderSearch.trim()}
+      loading={orderSearchQuery.isLoading}
+      result={orderSearchQuery.data}
+      error={orderSearchQuery.isError}
+      onSelect={(result) => {
+        handleTicketSelect(result);
+        setOrderSearch("");
+      }}
+    />
+  </div>
+</div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -470,12 +589,13 @@ function POSPage() {
               Close Sale
             </button>
 
-            <button
-              type="button"
-              className="rounded-lg border border-white/30 px-6 py-2 text-sm font-bold"
-            >
-              Orders
-            </button>
+           <button
+  type="button"
+  onClick={goToOrdersPage}
+  className="rounded-lg border border-white/30 px-6 py-2 text-sm font-bold"
+>
+  Orders
+</button>
           </div>
         </header>
 
@@ -510,8 +630,8 @@ function POSPage() {
                         setSearchQuery("");
                       }}
                       className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${selectedCategoryId === category.id
-                          ? "bg-[#E8A020] text-white shadow-md"
-                          : "border border-[#ded9d3] bg-white text-[#3d0c02]"
+                        ? "bg-[#E8A020] text-white shadow-md"
+                        : "border border-[#ded9d3] bg-white text-[#3d0c02]"
                         }`}
                     >
                       {category.name}
@@ -581,8 +701,8 @@ function POSPage() {
                   type="button"
                   onClick={() => setOrderType("DINE_IN")}
                   className={`flex-1 py-3 text-sm font-bold ${orderType === "DINE_IN"
-                      ? "bg-[#E8A020] text-white"
-                      : "text-[#3d0c02]/70"
+                    ? "bg-[#E8A020] text-white"
+                    : "text-[#3d0c02]/70"
                     }`}
                 >
                   Dine in
@@ -594,8 +714,8 @@ function POSPage() {
                   type="button"
                   onClick={() => setOrderType("DELIVERY")}
                   className={`flex-1 py-3 text-sm font-bold ${orderType === "DELIVERY"
-                      ? "bg-[#E8A020] text-white"
-                      : "text-[#3d0c02]/70"
+                    ? "bg-[#E8A020] text-white"
+                    : "text-[#3d0c02]/70"
                     }`}
                 >
                   Delivery
@@ -607,8 +727,8 @@ function POSPage() {
                   type="button"
                   onClick={() => setOrderType("TAKEOUT")}
                   className={`flex-1 py-3 text-sm font-bold ${orderType === "TAKEOUT"
-                      ? "bg-[#E8A020] text-white"
-                      : "text-[#3d0c02]/70"
+                    ? "bg-[#E8A020] text-white"
+                    : "text-[#3d0c02]/70"
                     }`}
                 >
                   Takeout
@@ -800,8 +920,8 @@ function POSPage() {
                   onClick={handlePrintKOT}
                   disabled={(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading}
                   className={`flex h-[64px] w-full items-center justify-center gap-3 rounded-xl border-2 text-xl font-bold ${(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading
-                      ? "cursor-not-allowed border-gray-300 text-gray-400"
-                      : "border-[#3d0c02] text-[#3d0c02]"
+                    ? "cursor-not-allowed border-gray-300 text-gray-400"
+                    : "border-[#3d0c02] text-[#3d0c02]"
                     }`}
                 >
                   {kotLoading ? "Printing KOT..." : "Print KOT"}
@@ -813,8 +933,8 @@ function POSPage() {
                     onClick={() => setShowPaymentModal(true)}
                     disabled={cartItems.length === 0}
                     className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cartItems.length === 0
-                        ? "cursor-not-allowed bg-gray-300"
-                        : "bg-[#E8A020]"
+                      ? "cursor-not-allowed bg-gray-300"
+                      : "bg-[#E8A020]"
                       }`}
                   >
                     Collect Payment
@@ -825,8 +945,8 @@ function POSPage() {
                     onClick={handleSaveOrder}
                     disabled={cartItems.length === 0 || saveLoading}
                     className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cartItems.length === 0 || saveLoading
-                        ? "cursor-not-allowed bg-gray-300"
-                        : "bg-green-600"
+                      ? "cursor-not-allowed bg-gray-300"
+                      : "bg-green-600"
                       }`}
                   >
                     {saveLoading ? "Saving..." : "Save"}
@@ -971,8 +1091,8 @@ function POSPage() {
                     onClick={handleConfirmCloseSale}
                     disabled={closeLoading}
                     className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${closeLoading
-                        ? "cursor-not-allowed bg-gray-400"
-                        : "bg-red-600"
+                      ? "cursor-not-allowed bg-gray-400"
+                      : "bg-red-600"
                       }`}
                   >
                     {closeLoading ? "Closing..." : "Confirm & Close Sale"}
@@ -987,15 +1107,15 @@ function POSPage() {
           <div className="pointer-events-none fixed right-6 top-20 z-[200]">
             <div
               className={`pointer-events-auto min-w-[320px] max-w-[420px] rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur-sm transition-all ${toast.type === "success"
-                  ? "border-emerald-200 bg-white text-[#3d0c02]"
-                  : "border-red-200 bg-white text-[#3d0c02]"
+                ? "border-emerald-200 bg-white text-[#3d0c02]"
+                : "border-red-200 bg-white text-[#3d0c02]"
                 }`}
             >
               <div className="flex items-start gap-3">
                 <div
                   className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${toast.type === "success"
-                      ? "bg-emerald-100 text-emerald-600"
-                      : "bg-red-100 text-red-600"
+                    ? "bg-emerald-100 text-emerald-600"
+                    : "bg-red-100 text-red-600"
                     }`}
                 >
                   {toast.type === "success" ? "✓" : "!"}

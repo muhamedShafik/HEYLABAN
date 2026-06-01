@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import POSPage from "../pages/POSPage";
 import OpenSalesPage from "../pages/OpenSalesPage";
+import OrdersPage from "../pages/OrdersPage";
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = !!window.accessToken;
@@ -34,6 +35,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <POSPage />
+          </ProtectedRoute>
+        }
+      />
+       <Route
+        path="/orders"
+        element={
+          <ProtectedRoute>
+            <OrdersPage />
           </ProtectedRoute>
         }
       />
