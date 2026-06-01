@@ -62,11 +62,25 @@ function POSPage() {
   const getTotal = useCartStore((state) => state.getTotal);
   const products = useCartStore((state) => state.products);
 
+  // ─── read cart-restored order from store ────────────────────────────────────
+const currentOrderId   = useCartStore((state) => state.currentOrderId);
+const currentOrderNo   = useCartStore((state) => state.currentOrderNo);
+const clearCurrentOrder = useCartStore((state) => state.clearCurrentOrder);
+
+
   const { data: categories = [], isLoading, isError } = useQuery({
     queryKey: ["catalogue"],
     queryFn: fetchCatalogue,
     staleTime: 5 * 60 * 1000,
   });
+
+  // seed lastSavedOrder from store when navigated from Orders → Go to Cart
+useEffect(() => {
+  if (currentOrderId && !lastSavedOrder?.id) {
+    setLastSavedOrder({ id: currentOrderId, orderNo: currentOrderNo });
+    setIsCartDirty(false);
+  }
+}, []); // run only on mount — intentional empty deps
 
   useEffect(() => {
     if (showDiscountEditor) {
@@ -178,14 +192,15 @@ function POSPage() {
     );
   };
 
-  const resetCurrentOrderFlow = () => {
-    clearCart();
-    setLastSavedOrder(null);
-    setLastKot(null);
-    setIsCartDirty(false);
-    setShowOrderNote(false);
-    setOrderNote("");
-  };
+ const resetCurrentOrderFlow = () => {
+  clearCart();
+  clearCurrentOrder();        // ← add this line
+  setLastSavedOrder(null);
+  setLastKot(null);
+  setIsCartDirty(false);
+  setShowOrderNote(false);
+  setOrderNote("");
+};
 
   const resetCloseModal = () => {
     setClosingNote("");
@@ -470,18 +485,26 @@ function POSPage() {
   const orderSearchQuery = useTicketSearchQuery(normalizedOrderQuery, !!normalizedOrderQuery);
   const kotSearchQuery = useTicketSearchQuery(normalizedKotQuery, !!normalizedKotQuery);
 
-  const handleTicketSelect = (result) => {
-    if (result.type === "ORDER") {
-      navigate(
-        `/orders?selectedOrderId=${result.data.id}&selectedOrderNo=${result.data.orderNo}&search=${result.data.orderNo}`
-      );
-      return;
-    }
+ const handleTicketSelect = (result) => {
+  const params = new URLSearchParams({
+    page: "1",
+    limit: "20",
+    sortBy: "createdAt",
+    sortDir: "DESC",
+  });
 
-    navigate(
-      `/orders?selectedOrderId=${result.data.order.id}&selectedOrderNo=${result.data.order.orderNo}&selectedKotNo=${result.data.kotNo}&search=${result.data.order.orderNo}`
-    );
-  };
+  if (result.type === "ORDER") {
+    params.set("selectedOrderId", result.data.id);
+    params.set("selectedOrderNo", result.data.orderNo);
+    navigate(`/orders?${params.toString()}`);
+    return;
+  }
+
+  params.set("selectedOrderId", result.data.order.id);
+  params.set("selectedOrderNo", result.data.order.orderNo);
+  params.set("selectedKotNo", result.data.kotNo);
+  navigate(`/orders?${params.toString()}`);
+};
 
   const queryClient = useQueryClient();
 
@@ -500,6 +523,11 @@ function POSPage() {
 
     navigate(`/orders?${params.toString()}`);
   };
+
+
+  const goToSettingsPage = () => {
+  navigate("/settings");
+};
   return (
     <>
       <div className="flex h-screen flex-col overflow-hidden bg-[#fef9f2] text-[#3d0c02]">
@@ -574,9 +602,15 @@ function POSPage() {
             <button type="button" className="opacity-80">
               ↺
             </button>
-            <button type="button" className="opacity-80">
-              ⚙
-            </button>
+           <button
+    type="button"
+    onClick={goToSettingsPage}
+    className="opacity-80 transition hover:opacity-100"
+    title="Settings"
+    aria-label="Open settings"
+  >
+    ⚙
+  </button>
             <button type="button" className="opacity-80">
               👤
             </button>

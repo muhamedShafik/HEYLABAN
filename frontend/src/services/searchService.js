@@ -1,9 +1,17 @@
-// src/services/searchService.js
 import api from "./api";
 
 export async function searchTickets(q) {
-  const response = await api.get("/api/search/tickets", {
-    params: { q },
-  });
-  return response.data.data;
+  try {
+    const response = await api.get("/api/search/tickets", {
+      params: { q },
+    });
+
+    return response.data.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return null;
+    }
+
+    throw error;
+  }
 }

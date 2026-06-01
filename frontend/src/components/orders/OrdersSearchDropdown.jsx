@@ -1,4 +1,3 @@
-// src/components/orders/OrdersSearchDropdown.jsx
 function OrdersSearchDropdown({
   open,
   loading,
@@ -13,7 +12,7 @@ function OrdersSearchDropdown({
       {loading ? (
         <div className="px-3 py-4 text-sm text-[#54433f]">Searching...</div>
       ) : error ? (
-        <div className="px-3 py-4 text-sm text-red-600">No ticket found.</div>
+        <div className="px-3 py-4 text-sm text-red-600">Search failed.</div>
       ) : result ? (
         <button
           type="button"
@@ -23,6 +22,7 @@ function OrdersSearchDropdown({
           <p className="text-sm font-bold">
             {result.type === "ORDER" ? result.data.orderNo : result.data.kotNo}
           </p>
+
           <p className="mt-1 text-xs text-[#54433f]">
             {result.type === "ORDER"
               ? `Token #${result.data.tokenNo} • ${result.data.status}`
@@ -30,7 +30,7 @@ function OrdersSearchDropdown({
           </p>
         </button>
       ) : (
-        <div className="px-3 py-4 text-sm text-[#54433f]">Type ORD- or KOT- number.</div>
+        <div className="px-3 py-4 text-sm text-[#54433f]">No ticket found.</div>
       )}
     </div>
   );

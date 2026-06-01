@@ -4,6 +4,7 @@ import LoginPage from "../pages/LoginPage";
 import POSPage from "../pages/POSPage";
 import OpenSalesPage from "../pages/OpenSalesPage";
 import OrdersPage from "../pages/OrdersPage";
+import SettingsPage from "../pages/SettingsPage";
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = !!window.accessToken;
@@ -43,6 +44,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <OrdersPage />
+          </ProtectedRoute>
+        }
+      />
+       <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />

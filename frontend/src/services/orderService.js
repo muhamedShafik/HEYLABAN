@@ -20,3 +20,8 @@ export async function updateOrder(orderId, payload) {
   const response = await api.patch(`/api/orders/${orderId}`, payload);
   return response.data.data;
 }
+
+export async function cancelOrder(orderId, payload) {
+  const response = await api.patch(`/api/orders/${orderId}/cancel`, payload);
+  return response.data.data;
+}
