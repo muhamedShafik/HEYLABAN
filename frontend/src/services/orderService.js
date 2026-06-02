@@ -22,6 +22,7 @@ export async function updateOrder(orderId, payload) {
 }
 
 export async function cancelOrder(orderId, payload) {
-  const response = await api.patch(`/api/orders/${orderId}/cancel`, payload);
+ 
+  const response = await api.post(`/api/orders/${orderId}/cancel`, payload);
   return response.data.data;
 }

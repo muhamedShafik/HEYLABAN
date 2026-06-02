@@ -30,7 +30,6 @@ function OrdersPage() {
     [searchParams]
   );
 
-  // ─── auto-dismiss toast after 3s ─────────────────────────────────────────
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3000);
@@ -40,18 +39,21 @@ function OrdersPage() {
   const showToast = (type, title, message) =>
     setToast({ id: Date.now(), type, title, message });
 
-  const ordersQuery = useOrdersQuery({
-    page: params.page,
-    limit: params.limit,
-    status: params.status || undefined,
-    kotStatus: params.kotStatus || undefined,
-    orderType: params.orderType || undefined,
-    search: params.search || undefined,
-    from: params.from || undefined,
-    to: params.to || undefined,
-    sortBy: params.sortBy,
-    sortDir: params.sortDir,
-  });
+  const ordersQuery = useOrdersQuery(
+    {
+      page: params.page,
+      limit: params.limit,
+      status: params.status || undefined,
+      kotStatus: params.kotStatus || undefined,
+      orderType: params.orderType || undefined,
+      search: params.search || undefined,
+      from: params.from || undefined,
+      to: params.to || undefined,
+      sortBy: params.sortBy,
+      sortDir: params.sortDir,
+    },
+    { refetchOnMount: "always" }
+  );
 
   const selectedOrderQuery = useQuery({
     queryKey: ["order", params.selectedOrderId],
@@ -59,9 +61,25 @@ function OrdersPage() {
     enabled: !!params.selectedOrderId,
   });
 
-  const orders = ordersQuery.data?.items || ordersQuery.data?.data || [];
+  const rawOrders = ordersQuery.data?.items || ordersQuery.data?.data || [];
   const pagination = ordersQuery.data?.pagination || null;
 
+  // ─── Merge fresh selected order data into list for instant badge update ──
+  const orders = rawOrders.map((o) => {
+    if (selectedOrderQuery.data && selectedOrderQuery.data.id === o.id) {
+      return {
+        ...o,
+        totalPaid: selectedOrderQuery.data.totalPaid ?? o.totalPaid,
+        balanceDue: selectedOrderQuery.data.balanceDue ?? o.balanceDue,
+        payments: selectedOrderQuery.data.payments ?? o.payments ?? [],
+        status: selectedOrderQuery.data.status ?? o.status,
+        kotStatus: selectedOrderQuery.data.kotStatus ?? o.kotStatus,
+      };
+    }
+    return o;
+  });
+
+  // ─── Auto-select first order if none selected ────────────────────────────
   useEffect(() => {
     if (!params.selectedOrderId && orders.length > 0) {
       const query = buildOrdersSearchParams({
@@ -120,8 +138,7 @@ function OrdersPage() {
 
   // ─── KOT Print / Reprint ─────────────────────────────────────────────────
   const printKotMutation = useMutation({
-    mutationFn: ({ orderId, note }) =>
-      createKot(orderId, { note: note || null }),
+    mutationFn: ({ orderId, note }) => createKot(orderId, { note: note || null }),
     onSuccess: async (kot, variables) => {
       await refetchOrder(variables.orderId);
       const isReprint = kot?.status === "REPRINTED";
@@ -188,11 +205,16 @@ function OrdersPage() {
 
   const handleConfirmCancel = async () => {
     if (!cancelModal.order) return;
+    const trimmedReason = cancelReason.trim();
+    if (!trimmedReason || trimmedReason.length < 3) {
+      showToast("error", "Reason Required", "Please enter at least 3 characters for the cancel reason.");
+      return;
+    }
     setActionState({ orderId: cancelModal.order.id, type: "cancel" });
     try {
       await cancelMutation.mutateAsync({
         orderId: cancelModal.order.id,
-        payload: { cancelReason: cancelReason.trim() || null },
+        payload: { reason: trimmedReason },
       });
     } finally {
       setActionState({ orderId: null, type: "" });
@@ -209,7 +231,6 @@ function OrdersPage() {
               View all orders and inspect full order details.
             </p>
           </div>
-
           <button
             type="button"
             onClick={() => navigate("/pos")}
@@ -247,7 +268,7 @@ function OrdersPage() {
         </div>
       </div>
 
-      {/* ─── Cancel Confirmation Modal ───────────────────────────────────── */}
+      {/* ─── Cancel Modal ─────────────────────────────────────────────────── */}
       {cancelModal.open && cancelModal.order && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#3a0a01]/60 p-4">
           <div className="w-full max-w-[440px] rounded-2xl border border-[#ded9d3] bg-[#fef9f2] shadow-2xl">
@@ -265,7 +286,7 @@ function OrdersPage() {
               <div>
                 <label className="mb-2 block text-sm font-bold text-[#3d0c02]">
                   Cancel Reason{" "}
-                  <span className="font-normal opacity-50">(optional)</span>
+                  <span className="font-normal text-red-500">* required (min 3 chars)</span>
                 </label>
                 <textarea
                   rows={3}
@@ -278,8 +299,7 @@ function OrdersPage() {
 
               {cancelMutation.isError && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {cancelMutation.error?.response?.data?.message ||
-                    "Failed to cancel order."}
+                  {cancelMutation.error?.response?.data?.message || "Failed to cancel order."}
                 </div>
               )}
 
@@ -312,7 +332,7 @@ function OrdersPage() {
         </div>
       )}
 
-      {/* ─── Toast ───────────────────────────────────────────────────────── */}
+      {/* ─── Toast ────────────────────────────────────────────────────────── */}
       {toast && (
         <div className="pointer-events-none fixed right-6 top-20 z-[200]">
           <div
@@ -344,7 +364,6 @@ function OrdersPage() {
                 ×
               </button>
             </div>
-
             <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#f3eee8]">
               <div
                 className={`h-full animate-[toastShrink_3s_linear_forwards] rounded-full ${
