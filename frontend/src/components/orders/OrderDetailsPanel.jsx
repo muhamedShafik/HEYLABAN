@@ -64,10 +64,10 @@ function OrderDetailsPanel({
   const canEdit     = !isCancelled && !payMeta.isPaid;
   const canKot      = !isCancelled;
   const canCancel   = !isCancelled && !payMeta.isPaid;
-  const kotLabel    =
-    order.kotStatus === "PRINTED" || order.kotStatus === "REPRINTED" || order.kotNo
-      ? "KOT Reprint"
-      : "Print KOT";
+ const kotLabel =
+  order.kotStatus === "PRINTED" || order.kotStatus === "REPRINTED" || order.kot?.kotNo
+    ? "KOT Reprint"
+    : "Print KOT";
 
   return (
     <div className="sticky top-6 rounded-2xl border border-[#ded9d3] bg-white p-5 shadow-sm">
@@ -85,20 +85,20 @@ function OrderDetailsPanel({
       </div>
 
       <div className="mt-4 space-y-3 text-sm">
-        {[
-          ["KOT No",    order.kotNo    || "—"],
-          ["Order Type", order.orderType?.replace(/_/g, " ") || "—"],
-          ["Subtotal",  `₹${Number(order.subtotal      || 0).toFixed(2)}`],
-          ["Discount",  `₹${Number(order.discountAmount || 0).toFixed(2)}`],
-          ["Total",     `₹${Number(order.totalAmount    || 0).toFixed(2)}`],
-          ["Paid",      `₹${Number(order.totalPaid      || 0).toFixed(2)}`],
-          ["Balance",   `₹${Number(order.balanceDue     || 0).toFixed(2)}`],
-        ].map(([label, value]) => (
-          <div key={label} className="flex justify-between">
-            <span className="opacity-70">{label}</span>
-            <span className="font-bold">{value}</span>
-          </div>
-        ))}
+       {[
+  ["KOT No",     order.kot?.kotNo || "—"],
+  ["Order Type", order.orderType?.replace(/_/g, " ") || "—"],
+  ["Subtotal",   `₹${Number(order.subtotal       || 0).toFixed(2)}`],
+  ["Discount",   `₹${Number(order.discountAmount  || 0).toFixed(2)}`],
+  ["Total",      `₹${Number(order.totalAmount     || 0).toFixed(2)}`],
+  ["Paid",       `₹${Number(order.totalPaid       || 0).toFixed(2)}`],
+  ["Balance",    `₹${Number(order.balanceDue      || 0).toFixed(2)}`],
+].map(([label, value]) => (
+  <div key={label} className="flex justify-between">
+    <span className="opacity-70">{label}</span>
+    <span className="font-bold">{value}</span>
+  </div>
+))}
         {order.cancelReason && (
           <div className="flex justify-between gap-4">
             <span className="opacity-70">Cancel Reason</span>

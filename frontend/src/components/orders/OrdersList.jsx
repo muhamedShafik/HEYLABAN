@@ -27,17 +27,16 @@ function getStatusClass(value) {
 function derivePaymentMeta(order) {
   const total = Number(order.totalAmount || 0);
   const paid = Number(order.totalPaid || 0);
-  const balance = Number(
-    order.balanceDue !== undefined && order.balanceDue !== null
-      ? order.balanceDue
-      : total - paid
-  );
+  const balance = Number(order.balanceDue ?? total - paid);
 
   if (order.status === "CANCELLED") {
-    return { label: "Cancelled", className: "bg-red-50 text-red-700 border-red-200" };
+    return {
+      label: "Cancelled",
+      className: "bg-red-50 text-red-700 border-red-200",
+    };
   }
 
-  if (total > 0 && balance <= 0 && paid >= total) {   // ← stricter: paid >= total
+  if (total > 0 && balance <= 0 && paid > 0) {
     const methods = order.payments?.length
       ? [...new Set(order.payments.map((p) => p.method))].join(" + ")
       : null;
@@ -49,19 +48,17 @@ function derivePaymentMeta(order) {
   }
 
   if (paid > 0 && balance > 0) {
-    const methods = order.payments?.length
-      ? [...new Set(order.payments.map((p) => p.method))].join(" + ")
-      : null;
-
     return {
-      label: methods ? `Partial · ${methods}` : "Partially Paid",
+      label: "Partially Paid",
       className: "bg-yellow-50 text-yellow-700 border-yellow-200",
     };
   }
 
-  return { label: "Not Paid", className: "bg-orange-50 text-orange-700 border-orange-200" };
+  return {
+    label: "Not Paid",
+    className: "bg-orange-50 text-orange-700 border-orange-200",
+  };
 }
-
 function OrdersList({
   orders,
   loading,

@@ -5,9 +5,17 @@ import POSPage from "../pages/POSPage";
 import OpenSalesPage from "../pages/OpenSalesPage";
 import OrdersPage from "../pages/OrdersPage";
 import SettingsPage from "../pages/SettingsPage";
+import PageLoader from "../components/ui/PageLoader";
+import ChangePasswordPage from "../pages/ChangePasswordPage";
+
+import { useAuthStore } from "../store/authStore";
 
 function ProtectedRoute({ children }) {
-  const isAuthenticated = !!window.accessToken;
+  const { isAuthenticated, isAuthLoading } = useAuthStore();
+
+  if (isAuthLoading) {
+    return <div><PageLoader /></div>;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -55,6 +63,15 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+       <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePasswordPage />
+          </ProtectedRoute>
+        }
+      />
+  
     </Routes>
   );
 }

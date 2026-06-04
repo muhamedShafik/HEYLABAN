@@ -3,13 +3,12 @@ import api from "./api";
 
 export async function fetchOrders(params = {}) {
   const response = await api.get("/api/orders", { params });
-  return response.data.data;
+  return response.data.data; // returns { data: [...], pagination: {...} }
 }
-
 export async function fetchOrderById(orderId) {
   const response = await api.get(`/api/orders/${orderId}`);
   return response.data.data;
-}
+} 
 
 export async function createOrder(payload) {
   const response = await api.post("/api/orders", payload);

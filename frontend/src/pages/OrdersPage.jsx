@@ -25,6 +25,8 @@ function OrdersPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [toast, setToast] = useState(null);
 
+  const [orderDetailCache, setOrderDetailCache] = useState({});
+
   const params = useMemo(
     () => getOrdersParamsFromSearch(searchParams),
     [searchParams]
@@ -55,31 +57,43 @@ function OrdersPage() {
     { refetchOnMount: "always" }
   );
 
-  const selectedOrderQuery = useQuery({
-    queryKey: ["order", params.selectedOrderId],
-    queryFn: () => fetchOrderById(params.selectedOrderId),
-    enabled: !!params.selectedOrderId,
-  });
+ const selectedOrderQuery = useQuery({
+  queryKey: ["order", params.selectedOrderId],
+  queryFn: () => fetchOrderById(params.selectedOrderId),
+  enabled: !!params.selectedOrderId,
+  refetchOnMount: "always",
+  staleTime: 0,
+});
 
-  const rawOrders = ordersQuery.data?.items || ordersQuery.data?.data || [];
+  useEffect(() => {
+  const selected = selectedOrderQuery.data;
+  if (!selected?.id) return;
+
+  setOrderDetailCache((prev) => ({
+    ...prev,
+    [selected.id]: selected,
+  }));
+}, [selectedOrderQuery.data]);
+
+  const rawOrders = ordersQuery.data?.data || [];
   const pagination = ordersQuery.data?.pagination || null;
 
-  // ─── Merge fresh selected order data into list for instant badge update ──
-  const orders = rawOrders.map((o) => {
-    if (selectedOrderQuery.data && selectedOrderQuery.data.id === o.id) {
-      return {
-        ...o,
-        totalPaid: selectedOrderQuery.data.totalPaid ?? o.totalPaid,
-        balanceDue: selectedOrderQuery.data.balanceDue ?? o.balanceDue,
-        payments: selectedOrderQuery.data.payments ?? o.payments ?? [],
-        status: selectedOrderQuery.data.status ?? o.status,
-        kotStatus: selectedOrderQuery.data.kotStatus ?? o.kotStatus,
-      };
-    }
-    return o;
-  });
+ const orders = useMemo(() => {
+  return rawOrders.map((o) => {
+    const cached = orderDetailCache[o.id];
+    if (!cached) return o;
 
-  // ─── Auto-select first order if none selected ────────────────────────────
+    return {
+      ...o,
+      totalPaid: cached.totalPaid ?? o.totalPaid,
+      balanceDue: cached.balanceDue ?? o.balanceDue,
+      payments: cached.payments ?? o.payments ?? [],
+      status: cached.status ?? o.status,
+      kotStatus: cached.kotStatus ?? o.kotStatus,
+    };
+  });
+}, [rawOrders, orderDetailCache]);
+
   useEffect(() => {
     if (!params.selectedOrderId && orders.length > 0) {
       const query = buildOrdersSearchParams({
@@ -245,7 +259,7 @@ function OrdersPage() {
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="max-h-[calc(100vh-260px)] overflow-y-auto rounded-2xl pr-1">
             <OrdersList
-              orders={orders}
+              orders={orders}    // ← must be `orders`, not `rawOrders`
               loading={ordersQuery.isLoading}
               error={ordersQuery.isError}
               selectedOrderId={params.selectedOrderId}
@@ -318,11 +332,10 @@ function OrdersPage() {
                   type="button"
                   disabled={cancelMutation.isPending}
                   onClick={handleConfirmCancel}
-                  className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${
-                    cancelMutation.isPending
+                  className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cancelMutation.isPending
                       ? "cursor-not-allowed bg-gray-300"
                       : "bg-red-600"
-                  }`}
+                    }`}
                 >
                   {cancelMutation.isPending ? "Cancelling..." : "Confirm Cancel"}
                 </button>
@@ -336,19 +349,17 @@ function OrdersPage() {
       {toast && (
         <div className="pointer-events-none fixed right-6 top-20 z-[200]">
           <div
-            className={`pointer-events-auto min-w-[320px] max-w-[420px] rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur-sm transition-all ${
-              toast.type === "success"
+            className={`pointer-events-auto min-w-[320px] max-w-[420px] rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur-sm transition-all ${toast.type === "success"
                 ? "border-emerald-200 bg-white text-[#3d0c02]"
                 : "border-red-200 bg-white text-[#3d0c02]"
-            }`}
+              }`}
           >
             <div className="flex items-start gap-3">
               <div
-                className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                  toast.type === "success"
+                className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${toast.type === "success"
                     ? "bg-emerald-100 text-emerald-600"
                     : "bg-red-100 text-red-600"
-                }`}
+                  }`}
               >
                 {toast.type === "success" ? "✓" : "✕"}
               </div>
@@ -366,9 +377,8 @@ function OrdersPage() {
             </div>
             <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#f3eee8]">
               <div
-                className={`h-full animate-[toastShrink_3s_linear_forwards] rounded-full ${
-                  toast.type === "success" ? "bg-emerald-500" : "bg-red-500"
-                }`}
+                className={`h-full animate-[toastShrink_3s_linear_forwards] rounded-full ${toast.type === "success" ? "bg-emerald-500" : "bg-red-500"
+                  }`}
               />
             </div>
           </div>

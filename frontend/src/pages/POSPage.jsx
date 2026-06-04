@@ -415,56 +415,49 @@ useEffect(() => {
 
   const [paymentLoading, setPaymentLoading] = useState(false);
 
- const handleConfirmPayment = async ({ payments }) => {
+const handleConfirmPayment = async (payments) => {
   try {
     setPaymentLoading(true);
-
     const order = await ensureOrderForCart();
+    const response = await createOrderPayment(order.id, payments);
 
-    console.log("ORDER:", order);
-    console.log("PAYMENTS:", payments);
+    await queryClient.invalidateQueries({ queryKey: ["orders"] });
+    await queryClient.invalidateQueries({ queryKey: ["order", order.id] });
 
-    const response = await createOrderPayment(order.id, { payments });
+    showToast(
+      "success",
+      "Payment completed",
+      `${response.orderNo || order.orderNo} paid successfully.`
+    );
 
-    queryClient.invalidateQueries({ queryKey: ["orders"] });
-
-    if (order?.id) {
-      queryClient.invalidateQueries({ queryKey: ["order", order.id] });
-    }
-
-    console.log("PAYMENT RESPONSE:", response);
-
-    showToast({
-      type: "success",
-      title: "Payment completed",
-      message: `${response.orderNo || order.orderNo} paid successfully.`,
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "20",
+      sortBy: "createdAt",
+      sortDir: "DESC",
+      selectedOrderId: order.id,
+      selectedOrderNo: order.orderNo,
     });
 
     resetCurrentOrderFlow();
     setShowPaymentModal(false);
+    navigate(`/orders?${params.toString()}`);
+
     return response;
   } catch (err) {
-    console.log("PAYMENT ERROR FULL:", err?.response?.data);
-
     const message =
       err?.response?.data?.message ||
       err?.response?.data?.error ||
       err?.message ||
       "Failed to complete payment.";
-
-    showToast({
-      type: "error",
-      title: "Payment failed",
-      message,
-    });
-
+    showToast("error", "Payment failed", message);
     throw err;
   } finally {
     setPaymentLoading(false);
   }
 };
 
-  // seacrh and orders section
+
 
   const [orderSearch, setOrderSearch] = useState("");
   const [kotSearch, setKotSearch] = useState("");
