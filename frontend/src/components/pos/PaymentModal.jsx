@@ -33,6 +33,15 @@ const submitPayment = async () => {
   setError("");
 
   const amount = Number(total);
+
+  if (paymentMethod === "not paid") {
+    try {
+      await onConfirm({ type: "UNPAID" });
+      onClose();
+    } catch {}
+    return;
+  }
+
   const payments = [];
 
   if (paymentMethod === "cash") {
@@ -71,7 +80,11 @@ const submitPayment = async () => {
   }
 
   try {
-    await onConfirm({ payments });
+    await onConfirm({
+      type: "PAID",
+      payments,
+    });
+    onClose();
   } catch {}
 };
   return (
@@ -114,68 +127,72 @@ const submitPayment = async () => {
           ))}
         </div>
 
-        <div className="mt-5">
-          {paymentMethod === "cash" ? (
-            <>
-              <label className="mb-2 block text-sm font-bold text-[#54433f]">
-                Cash Tendered
-              </label>
+       <div className="mt-5">
+  {paymentMethod === "cash" ? (
+    <>
+      <label className="mb-2 block text-sm font-bold text-[#54433f]">
+        Cash Tendered
+      </label>
 
-              <input
-                value={cashReceived}
-                onChange={(e) => {
-                  setCashReceived(e.target.value);
-                  setError("");
-                }}
-                className="h-14 w-full rounded-xl border border-[#3d0c02] px-4 text-center text-2xl font-bold"
-                placeholder="₹500"
-                type="number"
-                disabled={loading}
-              />
+      <input
+        value={cashReceived}
+        onChange={(e) => {
+          setCashReceived(e.target.value);
+          setError("");
+        }}
+        className="h-14 w-full rounded-xl border border-[#3d0c02] px-4 text-center text-2xl font-bold"
+        placeholder="₹500"
+        type="number"
+        disabled={loading}
+      />
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                {[50, 100, 200, 500, 1000].map((amt) => (
-                  <button
-                    type="button"
-                    key={amt}
-                    onClick={() => quickCash(amt)}
-                    disabled={loading}
-                    className="rounded-full border border-[#ded9d3] bg-white px-4 py-2 text-sm font-bold"
-                  >
-                    ₹{amt}
-                  </button>
-                ))}
-              </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {[50, 100, 200, 500, 1000].map((amt) => (
+          <button
+            type="button"
+            key={amt}
+            onClick={() => quickCash(amt)}
+            disabled={loading}
+            className="rounded-full border border-[#ded9d3] bg-white px-4 py-2 text-sm font-bold"
+          >
+            ₹{amt}
+          </button>
+        ))}
+      </div>
 
-              <div className="mt-4 rounded-xl bg-[#f4efe7] p-4 text-center">
-                <span className="text-2xl font-extrabold text-green-600">
-                  Change: ₹{Number(change).toFixed(2)}
-                </span>
-              </div>
-            </>
-          ) : paymentMethod === "upi" || paymentMethod === "card" ? (
-            <>
-              <label className="mb-2 block text-sm font-bold text-[#54433f]">
-                Reference
-              </label>
-              <input
-                value={referenceNo}
-                onChange={(e) => {
-                  setReferenceNo(e.target.value);
-                  setError("");
-                }}
-                className="h-14 w-full rounded-xl border border-[#ded9d3] px-4 text-lg"
-                placeholder="UPI Ref / Last 4 Digits"
-                type="text"
-                disabled={loading}
-              />
-            </>
-          ) : (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              Select Cash, UPI, or Card to continue.
-            </div>
-          )}
-        </div>
+      <div className="mt-4 rounded-xl bg-[#f4efe7] p-4 text-center">
+        <span className="text-2xl font-extrabold text-green-600">
+          Change: ₹{Number(change).toFixed(2)}
+        </span>
+      </div>
+    </>
+  ) : paymentMethod === "upi" || paymentMethod === "card" ? (
+    <>
+      <label className="mb-2 block text-sm font-bold text-[#54433f]">
+        Reference
+      </label>
+      <input
+        value={referenceNo}
+        onChange={(e) => {
+          setReferenceNo(e.target.value);
+          setError("");
+        }}
+        className="h-14 w-full rounded-xl border border-[#ded9d3] px-4 text-lg"
+        placeholder="UPI Ref / Last 4 Digits"
+        type="text"
+        disabled={loading}
+      />
+    </>
+  ) : paymentMethod === "not paid" ? (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+      This order will be saved as unpaid. You can collect payment later from Orders.
+    </div>
+  ) : (
+    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      Select Cash, UPI, Card, or Not Paid.
+    </div>
+  )}
+</div>
 
         {error ? (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

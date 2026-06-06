@@ -24,6 +24,7 @@ function derivePaymentMeta(order) {
   const total   = Number(order.totalAmount || 0);
   const paid    = Number(order.totalPaid   || 0);
   const balance = Number(order.balanceDue  ?? total - paid);
+  
 
   if (order.status === "CANCELLED") {
     return { label: "Cancelled", className: "bg-red-50 text-red-700 border-red-200", isPaid: false, code: "CANCELLED" };
@@ -175,18 +176,22 @@ function OrderDetailsPanel({
       <div className="mt-6">
         <h3 className="mb-3 text-lg font-bold">Items</h3>
         <div className="space-y-3">
-          {order.orderItems?.map((item) => (
-            <div key={item.id} className="rounded-xl bg-[#f8f3ec]/40 p-3">
-              <div className="flex justify-between">
-                <span className="font-semibold">{item.name}</span>
-                <span className="font-bold">₹{Number(item.total || 0).toFixed(2)}</span>
-              </div>
-              <p className="text-sm text-[#54433f]">Qty: {item.quantity}</p>
-              {item.note && (
-                <p className="text-sm text-[#54433f]">Note: {item.note}</p>
-              )}
-            </div>
-          ))}
+         {order.orderItems?.map((item) => (
+  <div key={item.id} className="rounded-xl bg-[#f8f3ec]/40 p-3">
+    <div className="flex justify-between">
+      <span className="font-semibold">{item.name}</span>
+      <span className="font-bold">₹{Number(item.total || 0).toFixed(2)}</span>
+    </div>
+
+    <p className="text-sm text-[#54433f]">Qty: {item.quantity}</p>
+
+    {(item.note || item.itemNote || item.specialInstructions) && (
+      <p className="text-sm text-[#54433f]">
+        Note: {item.note || item.itemNote || item.specialInstructions}
+      </p>
+    )}
+  </div>
+))}
         </div>
       </div>
     </div>

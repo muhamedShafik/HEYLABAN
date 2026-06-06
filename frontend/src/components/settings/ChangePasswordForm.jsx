@@ -102,8 +102,8 @@ function ChangePasswordForm() {
       return errors;
     }
 
-    if (newPassword.length < 12) {
-      errors.newPassword = "New password must be at least 12 characters";
+    if (newPassword.length < 8) {
+      errors.newPassword = "New password must be at least 8 characters";
       return errors;
     }
 

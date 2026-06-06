@@ -32,7 +32,6 @@ function POSPage() {
   const [showCloseSaleModal, setShowCloseSaleModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-
   const [showDiscountEditor, setShowDiscountEditor] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
 
@@ -63,10 +62,9 @@ function POSPage() {
   const products = useCartStore((state) => state.products);
 
   // ─── read cart-restored order from store ────────────────────────────────────
-const currentOrderId   = useCartStore((state) => state.currentOrderId);
-const currentOrderNo   = useCartStore((state) => state.currentOrderNo);
-const clearCurrentOrder = useCartStore((state) => state.clearCurrentOrder);
-
+  const currentOrderId = useCartStore((state) => state.currentOrderId);
+  const currentOrderNo = useCartStore((state) => state.currentOrderNo);
+  const clearCurrentOrder = useCartStore((state) => state.clearCurrentOrder);
 
   const { data: categories = [], isLoading, isError } = useQuery({
     queryKey: ["catalogue"],
@@ -75,12 +73,12 @@ const clearCurrentOrder = useCartStore((state) => state.clearCurrentOrder);
   });
 
   // seed lastSavedOrder from store when navigated from Orders → Go to Cart
-useEffect(() => {
-  if (currentOrderId && !lastSavedOrder?.id) {
-    setLastSavedOrder({ id: currentOrderId, orderNo: currentOrderNo });
-    setIsCartDirty(false);
-  }
-}, []); // run only on mount — intentional empty deps
+  useEffect(() => {
+    if (currentOrderId && !lastSavedOrder?.id) {
+      setLastSavedOrder({ id: currentOrderId, orderNo: currentOrderNo });
+      setIsCartDirty(false);
+    }
+  }, []); // run only on mount — intentional empty deps
 
   useEffect(() => {
     if (showDiscountEditor) {
@@ -98,7 +96,6 @@ useEffect(() => {
     const ensureSession = async () => {
       try {
         const session = todaySession || (await fetchTodaySession());
-
         if (!session || session.status !== "OPEN") {
           navigate("/open-sales", { replace: true });
         }
@@ -106,17 +103,14 @@ useEffect(() => {
         navigate("/open-sales", { replace: true });
       }
     };
-
     ensureSession();
   }, [todaySession, fetchTodaySession, navigate]);
 
   useEffect(() => {
     if (!toast) return;
-
     const timer = setTimeout(() => {
       setToast(null);
     }, 3000);
-
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -138,7 +132,6 @@ useEffect(() => {
         )
       );
     }
-
     const selectedCat = categories.find((cat) => cat.id === selectedCategoryId);
     return selectedCat ? selectedCat.products : [];
   }, [categories, selectedCategoryId, searchQuery]);
@@ -192,14 +185,18 @@ useEffect(() => {
     );
   };
 
- const resetCurrentOrderFlow = () => {
-  clearCart();
-  clearCurrentOrder();        // ← add this line
-  setLastSavedOrder(null);
-  setLastKot(null);
-  setIsCartDirty(false);
-  setShowOrderNote(false);
-  setOrderNote("");
+  const resetCurrentOrderFlow = () => {
+    clearCart();
+    clearCurrentOrder();
+    setLastSavedOrder(null);
+    setLastKot(null);
+    setIsCartDirty(false);
+    setShowOrderNote(false);
+    setOrderNote("");
+  };
+
+  const shouldClearCartOnLeave = () => {
+  return !!lastSavedOrder?.id || !!currentOrderId || !!lastKot?.id;
 };
 
   const resetCloseModal = () => {
@@ -230,7 +227,6 @@ useEffect(() => {
         setCloseError("Expense category name is required.");
         return;
       }
-
       if (
         expense.amount === "" ||
         Number.isNaN(expense.amount) ||
@@ -245,12 +241,10 @@ useEffect(() => {
 
     try {
       setCloseLoading(true);
-
       await closeSession({
         closingNote: closingNote.trim() || null,
         expenses: cleanedExpenses,
       });
-
       resetCurrentOrderFlow();
       resetCloseModal();
       navigate("/open-sales", { replace: true });
@@ -263,8 +257,6 @@ useEffect(() => {
     }
   };
 
-  // Cart dirty tracking is consolidated in the useEffect above
-
   const buildOrderPayload = () => ({
     orderType,
     note: orderNote.trim() || null,
@@ -275,44 +267,40 @@ useEffect(() => {
       note: item.note?.trim() || null,
     })),
   });
+
   const ensureOrderForCart = async () => {
-  if (cartItems.length === 0) {
-    throw new Error("Please add at least one item.");
-  }
-
-  const payload = buildOrderPayload();
-
-  if (!lastSavedOrder?.id) {
-    const createdOrder = await createOrder(payload);
-    setLastSavedOrder(createdOrder);
-    setIsCartDirty(false);
-
-    queryClient.invalidateQueries({ queryKey: ["orders"] });
-
-    if (createdOrder?.id) {
-      queryClient.setQueryData(["order", createdOrder.id], createdOrder);
+    if (cartItems.length === 0) {
+      throw new Error("Please add at least one item.");
     }
 
-    return createdOrder;
-  }
+    const payload = buildOrderPayload();
 
-  if (!isCartDirty) {
-    return lastSavedOrder;
-  }
+    if (!lastSavedOrder?.id) {
+      const createdOrder = await createOrder(payload);
+      setLastSavedOrder(createdOrder);
+      setIsCartDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      if (createdOrder?.id) {
+        queryClient.setQueryData(["order", createdOrder.id], createdOrder);
+      }
+      return createdOrder;
+    }
 
-  const updatedOrder = await updateOrder(lastSavedOrder.id, payload);
-  setLastSavedOrder(updatedOrder);
-  setIsCartDirty(false);
+    if (!isCartDirty) {
+      return lastSavedOrder;
+    }
 
-  queryClient.invalidateQueries({ queryKey: ["orders"] });
+    const updatedOrder = await updateOrder(lastSavedOrder.id, payload);
+    setLastSavedOrder(updatedOrder);
+    setIsCartDirty(false);
+    queryClient.invalidateQueries({ queryKey: ["orders"] });
+    if (updatedOrder?.id) {
+      queryClient.setQueryData(["order", updatedOrder.id], updatedOrder);
+      queryClient.invalidateQueries({ queryKey: ["order", updatedOrder.id] });
+    }
+    return updatedOrder;
+  };
 
-  if (updatedOrder?.id) {
-    queryClient.setQueryData(["order", updatedOrder.id], updatedOrder);
-    queryClient.invalidateQueries({ queryKey: ["order", updatedOrder.id] });
-  }
-
-  return updatedOrder;
-};
   const handleSaveOrder = async () => {
     setLastKot(null);
 
@@ -327,20 +315,15 @@ useEffect(() => {
 
     try {
       setSaveLoading(true);
-
       const isNewOrder = !lastSavedOrder?.id;
       const order = await ensureOrderForCart();
-
       setLastSavedOrder(order);
       setIsCartDirty(false);
-
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-
       if (order?.id) {
         queryClient.invalidateQueries({ queryKey: ["order", order.id] });
         queryClient.setQueryData(["order", order.id], order);
       }
-
       showToast({
         type: "success",
         title: isNewOrder ? "Order saved" : "Order updated",
@@ -349,7 +332,6 @@ useEffect(() => {
     } catch (err) {
       const message =
         err?.response?.data?.message || err?.message || "Failed to save order.";
-
       showToast({
         type: "error",
         title: "Save failed",
@@ -374,23 +356,17 @@ useEffect(() => {
 
     try {
       setKotLoading(true);
-
       const order = await ensureOrderForCart();
-
       const kot = await createKot(order.id, {
         note: orderNote.trim() || null,
       });
-
       setLastSavedOrder(order);
       setLastKot(kot);
       setIsCartDirty(false);
-
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-
       if (order?.id) {
         queryClient.invalidateQueries({ queryKey: ["order", order.id] });
       }
-
       showToast({
         type: "success",
         title: kot.status === "REPRINTED" ? "KOT reprinted" : "KOT printed",
@@ -399,7 +375,6 @@ useEffect(() => {
     } catch (err) {
       const message =
         err?.response?.data?.message || err?.message || "Failed to print KOT.";
-
       showToast({
         type: "error",
         title: "KOT failed",
@@ -410,54 +385,56 @@ useEffect(() => {
     }
   };
 
-
   // payment section
-
   const [paymentLoading, setPaymentLoading] = useState(false);
 
-const handleConfirmPayment = async (payments) => {
-  try {
-    setPaymentLoading(true);
-    const order = await ensureOrderForCart();
-    const response = await createOrderPayment(order.id, payments);
+  const handleConfirmPayment = async (payload) => {
+    try {
+      setPaymentLoading(true);
+      const order = await ensureOrderForCart();
 
-    await queryClient.invalidateQueries({ queryKey: ["orders"] });
-    await queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+      if (payload.type === "UNPAID") {
+        showToast({
+          type: "success",
+          title: "Order saved",
+          message: `${order.orderNo} saved as unpaid.`,
+        });
+        setTimeout(() => {
+          resetCurrentOrderFlow();
+        }, 1000);
+        return order;
+      }
 
-    showToast(
-      "success",
-      "Payment completed",
-      `${response.orderNo || order.orderNo} paid successfully.`
-    );
+      const response = await createOrderPayment(order.id, {
+        payments: payload.payments,
+      });
 
-    const params = new URLSearchParams({
-      page: "1",
-      limit: "20",
-      sortBy: "createdAt",
-      sortDir: "DESC",
-      selectedOrderId: order.id,
-      selectedOrderNo: order.orderNo,
-    });
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["order", order.id] });
 
-    resetCurrentOrderFlow();
-    setShowPaymentModal(false);
-    navigate(`/orders?${params.toString()}`);
+      showToast({
+        type: "success",
+        title: "Payment completed",
+        message: `${response.orderNo || order.orderNo} paid successfully.`,
+      });
 
-    return response;
-  } catch (err) {
-    const message =
-      err?.response?.data?.message ||
-      err?.response?.data?.error ||
-      err?.message ||
-      "Failed to complete payment.";
-    showToast("error", "Payment failed", message);
-    throw err;
-  } finally {
-    setPaymentLoading(false);
-  }
-};
+      setTimeout(() => {
+        resetCurrentOrderFlow();
+      }, 1000);
 
-
+      return response;
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to complete payment.";
+      showToast({ type: "error", title: "Payment failed", message });
+      throw err;
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
 
   const [orderSearch, setOrderSearch] = useState("");
   const [kotSearch, setKotSearch] = useState("");
@@ -478,30 +455,7 @@ const handleConfirmPayment = async (payments) => {
   const orderSearchQuery = useTicketSearchQuery(normalizedOrderQuery, !!normalizedOrderQuery);
   const kotSearchQuery = useTicketSearchQuery(normalizedKotQuery, !!normalizedKotQuery);
 
- const handleTicketSelect = (result) => {
-  const params = new URLSearchParams({
-    page: "1",
-    limit: "20",
-    sortBy: "createdAt",
-    sortDir: "DESC",
-  });
-
-  if (result.type === "ORDER") {
-    params.set("selectedOrderId", result.data.id);
-    params.set("selectedOrderNo", result.data.orderNo);
-    navigate(`/orders?${params.toString()}`);
-    return;
-  }
-
-  params.set("selectedOrderId", result.data.order.id);
-  params.set("selectedOrderNo", result.data.order.orderNo);
-  params.set("selectedKotNo", result.data.kotNo);
-  navigate(`/orders?${params.toString()}`);
-};
-
-  const queryClient = useQueryClient();
-
-  const goToOrdersPage = () => {
+  const handleTicketSelect = (result) => {
     const params = new URLSearchParams({
       page: "1",
       limit: "20",
@@ -509,18 +463,49 @@ const handleConfirmPayment = async (payments) => {
       sortDir: "DESC",
     });
 
-    if (lastSavedOrder?.id) {
-      params.set("selectedOrderId", lastSavedOrder.id);
-      params.set("selectedOrderNo", lastSavedOrder.orderNo);
+    if (result.type === "ORDER") {
+      params.set("selectedOrderId", result.data.id);
+      params.set("selectedOrderNo", result.data.orderNo);
+      navigate(`/orders?${params.toString()}`);
+      return;
     }
 
+    params.set("selectedOrderId", result.data.order.id);
+    params.set("selectedOrderNo", result.data.order.orderNo);
+    params.set("selectedKotNo", result.data.kotNo);
     navigate(`/orders?${params.toString()}`);
   };
 
+  const queryClient = useQueryClient();
 
-  const goToSettingsPage = () => {
+const goToOrdersPage = () => {
+  const params = new URLSearchParams({
+    page: 1,
+    limit: 20,
+    sortBy: "createdAt",
+    sortDir: "DESC",
+  });
+
+  if (lastSavedOrder?.id) {
+    params.set("selectedOrderId", lastSavedOrder.id);
+    params.set("selectedOrderNo", lastSavedOrder.orderNo);
+  }
+
+  if (shouldClearCartOnLeave()) {
+    resetCurrentOrderFlow();
+  }
+
+  navigate(`/orders?${params.toString()}`);
+};
+
+ const goToSettingsPage = () => {
+  if (shouldClearCartOnLeave()) {
+    resetCurrentOrderFlow();
+  }
+
   navigate("/settings");
 };
+
   return (
     <>
       <div className="flex h-screen flex-col overflow-hidden bg-[#fef9f2] text-[#3d0c02]">
@@ -536,49 +521,47 @@ const handleConfirmPayment = async (payments) => {
                 : "Today"}
             </span>
 
-           <div className="ml-4 flex items-center gap-2">
-  <div className="relative w-40">
-    <input
-      value={kotSearch}
-      onChange={(e) => setKotSearch(e.target.value)}
-      className="h-8 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-      placeholder="Search KOT"
-      type="text"
-    />
+            <div className="ml-4 flex items-center gap-2">
+              <div className="relative w-40">
+                <input
+                  value={kotSearch}
+                  onChange={(e) => setKotSearch(e.target.value)}
+                  className="h-8 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+                  placeholder="Search KOT"
+                  type="text"
+                />
+                <OrdersSearchDropdown
+                  open={!!kotSearch.trim()}
+                  loading={kotSearchQuery.isLoading}
+                  result={kotSearchQuery.data}
+                  error={kotSearchQuery.isError}
+                  onSelect={(result) => {
+                    handleTicketSelect(result);
+                    setKotSearch("");
+                  }}
+                />
+              </div>
 
-    <OrdersSearchDropdown
-      open={!!kotSearch.trim()}
-      loading={kotSearchQuery.isLoading}
-      result={kotSearchQuery.data}
-      error={kotSearchQuery.isError}
-      onSelect={(result) => {
-        handleTicketSelect(result);
-        setKotSearch("");
-      }}
-    />
-  </div>
-
-  <div className="relative w-40">
-    <input
-      value={orderSearch}
-      onChange={(e) => setOrderSearch(e.target.value)}
-      className="h-8 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-      placeholder="Search Order"
-      type="text"
-    />
-
-    <OrdersSearchDropdown
-      open={!!orderSearch.trim()}
-      loading={orderSearchQuery.isLoading}
-      result={orderSearchQuery.data}
-      error={orderSearchQuery.isError}
-      onSelect={(result) => {
-        handleTicketSelect(result);
-        setOrderSearch("");
-      }}
-    />
-  </div>
-</div>
+              <div className="relative w-40">
+                <input
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  className="h-8 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+                  placeholder="Search Order"
+                  type="text"
+                />
+                <OrdersSearchDropdown
+                  open={!!orderSearch.trim()}
+                  loading={orderSearchQuery.isLoading}
+                  result={orderSearchQuery.data}
+                  error={orderSearchQuery.isError}
+                  onSelect={(result) => {
+                    handleTicketSelect(result);
+                    setOrderSearch("");
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -592,21 +575,19 @@ const handleConfirmPayment = async (payments) => {
               </span>
             )}
 
-            <button type="button" className="opacity-80">
-              ↺
+            <button type="button" className="opacity-80">↺</button>
+
+            <button
+              type="button"
+              onClick={goToSettingsPage}
+              className="opacity-80 transition hover:opacity-100"
+              title="Settings"
+              aria-label="Open settings"
+            >
+              ⚙
             </button>
-           <button
-    type="button"
-    onClick={goToSettingsPage}
-    className="opacity-80 transition hover:opacity-100"
-    title="Settings"
-    aria-label="Open settings"
-  >
-    ⚙
-  </button>
-            <button type="button" className="opacity-80">
-              👤
-            </button>
+
+            <button type="button" className="opacity-80">👤</button>
 
             <button
               type="button"
@@ -616,17 +597,18 @@ const handleConfirmPayment = async (payments) => {
               Close Sale
             </button>
 
-           <button
-  type="button"
-  onClick={goToOrdersPage}
-  className="rounded-lg border border-white/30 px-6 py-2 text-sm font-bold"
->
-  Orders
-</button>
+            <button
+              type="button"
+              onClick={goToOrdersPage}
+              className="rounded-lg border border-white/30 px-6 py-2 text-sm font-bold"
+            >
+              Orders
+            </button>
           </div>
         </header>
 
         <main className="flex flex-1 overflow-hidden">
+          {/* ── Left: Product catalogue ── */}
           <section className="flex w-[60%] flex-col border-r border-[#ded9d3]">
             <div className="border-b border-[#ded9d3] bg-white/50 p-4">
               <input
@@ -656,10 +638,11 @@ const handleConfirmPayment = async (payments) => {
                         setSelectedCategoryId(category.id);
                         setSearchQuery("");
                       }}
-                      className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${selectedCategoryId === category.id
-                        ? "bg-[#E8A020] text-white shadow-md"
-                        : "border border-[#ded9d3] bg-white text-[#3d0c02]"
-                        }`}
+                      className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${
+                        selectedCategoryId === category.id
+                          ? "bg-[#E8A020] text-white shadow-md"
+                          : "border border-[#ded9d3] bg-white text-[#3d0c02]"
+                      }`}
                     >
                       {category.name}
                     </button>
@@ -702,7 +685,6 @@ const handleConfirmPayment = async (payments) => {
                         {cartQtyMap[product.id]}
                       </div>
                     )}
-
                     <div>
                       <h3 className="text-lg font-bold leading-tight">
                         {product.name}
@@ -721,73 +703,74 @@ const handleConfirmPayment = async (payments) => {
             </div>
           </section>
 
+          {/* ── Right: Cart ── */}
           <section className="flex w-[40%] flex-col bg-white">
-            <div className="border-b border-[#ded9d3] bg-[#f8f3ec]/50 p-4">
+            {/* Order type tabs */}
+            <div className="border-b border-[#ded9d3] bg-[#f8f3ec]/50 p-3">
               <div className="flex items-center overflow-hidden rounded-xl border border-[#ded9d3] bg-white">
                 <button
                   type="button"
                   onClick={() => setOrderType("DINE_IN")}
-                  className={`flex-1 py-3 text-sm font-bold ${orderType === "DINE_IN"
-                    ? "bg-[#E8A020] text-white"
-                    : "text-[#3d0c02]/70"
-                    }`}
+                  className={`flex-1 py-2 text-xs font-bold ${
+                    orderType === "DINE_IN"
+                      ? "bg-[#E8A020] text-white"
+                      : "text-[#3d0c02]/70"
+                  }`}
                 >
                   Dine in
                 </button>
-
-                <div className="h-6 w-px bg-[#ded9d3]" />
-
+                <div className="h-5 w-px bg-[#ded9d3]" />
                 <button
                   type="button"
                   onClick={() => setOrderType("DELIVERY")}
-                  className={`flex-1 py-3 text-sm font-bold ${orderType === "DELIVERY"
-                    ? "bg-[#E8A020] text-white"
-                    : "text-[#3d0c02]/70"
-                    }`}
+                  className={`flex-1 py-2 text-xs font-bold ${
+                    orderType === "DELIVERY"
+                      ? "bg-[#E8A020] text-white"
+                      : "text-[#3d0c02]/70"
+                  }`}
                 >
                   Delivery
                 </button>
-
-                <div className="h-6 w-px bg-[#ded9d3]" />
-
+                <div className="h-5 w-px bg-[#ded9d3]" />
                 <button
                   type="button"
                   onClick={() => setOrderType("TAKEOUT")}
-                  className={`flex-1 py-3 text-sm font-bold ${orderType === "TAKEOUT"
-                    ? "bg-[#E8A020] text-white"
-                    : "text-[#3d0c02]/70"
-                    }`}
+                  className={`flex-1 py-2 text-xs font-bold ${
+                    orderType === "TAKEOUT"
+                      ? "bg-[#E8A020] text-white"
+                      : "text-[#3d0c02]/70"
+                  }`}
                 >
                   Takeout
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-b border-[#ded9d3] p-6">
-              <div className="flex items-center gap-4">
-                <h2 className="text-2xl font-bold">Cart ({totalCartQty})</h2>
-
+            {/* Cart header */}
+            <div className="flex items-center justify-between border-b border-[#ded9d3] px-4 py-2">
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-bold">Cart ({totalCartQty})</h2>
                 <button
                   type="button"
                   onClick={() => setShowOrderNote((prev) => !prev)}
-                  className="text-sm font-bold text-[#E8A020]"
+                  className="text-xs font-bold text-[#E8A020]"
                 >
-                  {showOrderNote || orderNote.trim() ? "✎ Add Note" : "✎ Add Note"}
+                  ✎ Add Note
                 </button>
               </div>
-
               <button
                 type="button"
                 onClick={resetCurrentOrderFlow}
-                className="text-sm font-bold text-red-600"
+                className="text-xs font-bold text-red-600"
               >
                 Clear All
               </button>
             </div>
 
+            {/* Order note textarea */}
             {showOrderNote && (
-              <div className="border-b border-[#ded9d3] bg-white p-4">
-                <label className="mb-2 block text-sm font-bold text-[#3d0c02]">
+              <div className="border-b border-[#ded9d3] bg-white px-4 py-2">
+                <label className="mb-1 block text-xs font-bold text-[#3d0c02]">
                   Order Note
                 </label>
                 <textarea
@@ -795,55 +778,55 @@ const handleConfirmPayment = async (payments) => {
                   value={orderNote}
                   onChange={(e) => setOrderNote(e.target.value)}
                   placeholder="Example: No onion, urgent order..."
-                  className="w-full rounded-xl border border-[#ded9d3] bg-[#fef9f2] p-3 text-sm outline-none focus:border-[#E8A020]"
+                  className="w-full rounded-xl border border-[#ded9d3] bg-[#fef9f2] p-2 text-xs outline-none focus:border-[#E8A020]"
                 />
               </div>
             )}
 
-            <div className="flex-1 space-y-4 overflow-y-auto bg-[#f8f3ec]/30 p-4">
+            {/* ── Cart items list — flex-1 so it takes all remaining space ── */}
+            <div className="flex-1 space-y-2 overflow-y-auto bg-[#f8f3ec]/30 p-3">
               {cartItems.length === 0 ? (
-                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[#ded9d3] bg-white p-8 text-center text-gray-500">
+                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[#ded9d3] bg-white p-8 text-center text-gray-500 text-sm">
                   No items in cart
                 </div>
               ) : (
                 cartItems.map((item) => (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-[#ded9d3] bg-white p-4 shadow-[0_4px_12px_rgba(61,12,2,0.08)]"
+                    className="rounded-xl border border-[#ded9d3] bg-white p-3 shadow-[0_2px_8px_rgba(61,12,2,0.06)]"
                   >
-                    <div className="mb-3 flex items-start justify-between">
+                    <div className="mb-2 flex items-start justify-between">
                       <div>
-                        <h4 className="text-lg font-bold leading-tight">
+                        <h4 className="text-sm font-bold leading-tight">
                           {item.name}
                         </h4>
                         {item.description ? (
-                          <p className="mt-1 text-sm text-gray-500">
+                          <p className="mt-0.5 text-xs text-gray-500">
                             {item.description}
                           </p>
                         ) : null}
                       </div>
-
-                      <span className="text-lg font-bold">
+                      <span className="text-sm font-bold">
                         ₹{formatMoney(item.total)}
                       </span>
                     </div>
 
                     <div className="flex justify-end">
-                      <div className="flex items-center gap-4 rounded-lg border border-[#ded9d3] bg-[#fef9f2] p-1">
+                      <div className="flex items-center gap-3 rounded-lg border border-[#ded9d3] bg-[#fef9f2] p-1">
                         <button
                           type="button"
                           onClick={() => decreaseQty(item.id)}
-                          className="flex h-10 w-10 items-center justify-center rounded-md border border-[#ded9d3] bg-white"
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[#ded9d3] bg-white text-sm"
                         >
                           −
                         </button>
-                        <span className="w-6 text-center text-xl font-bold">
+                        <span className="w-5 text-center text-base font-bold">
                           {item.quantity}
                         </span>
                         <button
                           type="button"
                           onClick={() => increaseQty(item.id)}
-                          className="flex h-10 w-10 items-center justify-center rounded-md border border-[#ded9d3] bg-white"
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[#ded9d3] bg-white text-sm"
                         >
                           +
                         </button>
@@ -854,42 +837,45 @@ const handleConfirmPayment = async (payments) => {
               )}
             </div>
 
-            <div className="border-t border-[#ded9d3] bg-white p-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-              <div className="mb-6 space-y-3">
-                <div className="flex justify-between text-sm">
+            {/* ── Summary + buttons — compact, shrink-0 so it never grows ── */}
+            <div className="shrink-0 border-t border-[#ded9d3] bg-white px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+              <div className="mb-2 space-y-1.5">
+                {/* Order type row */}
+                <div className="flex justify-between text-xs">
                   <span className="opacity-70">Order Type</span>
                   <span className="font-bold">{orderType.replace("_", " ")}</span>
                 </div>
 
-                <div className="flex justify-between text-lg">
+                {/* Subtotal */}
+                <div className="flex justify-between text-xs">
                   <span className="opacity-70">Subtotal</span>
                   <span>₹{formatMoney(subtotal)}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-lg">
-                  <div className="flex items-center gap-2">
+                {/* Discount */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
                     <span className="opacity-70">Discount</span>
                     <button
                       type="button"
                       onClick={() => setShowDiscountEditor((prev) => !prev)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-[#ded9d3] bg-[#f8f3ec] text-sm text-[#3d0c02]"
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-[#ded9d3] bg-[#f8f3ec] text-xs text-[#3d0c02]"
                       title="Edit discount"
                     >
                       ✎
                     </button>
                   </div>
-
                   <span className="font-semibold text-green-700">
                     -₹{formatMoney(discountAmount)}
                   </span>
                 </div>
 
+                {/* Discount editor */}
                 {showDiscountEditor && (
-                  <div className="rounded-xl border border-[#ded9d3] bg-[#f8f3ec] p-3">
-                    <label className="mb-2 block text-sm font-bold text-[#3d0c02]">
+                  <div className="rounded-xl border border-[#ded9d3] bg-[#f8f3ec] p-2">
+                    <label className="mb-1 block text-xs font-bold text-[#3d0c02]">
                       Discount Amount
                     </label>
-
                     <div className="flex gap-2">
                       <input
                         type="number"
@@ -898,9 +884,8 @@ const handleConfirmPayment = async (payments) => {
                         value={discountInput}
                         onChange={(e) => setDiscountInput(e.target.value)}
                         placeholder="Enter discount"
-                        className="h-11 flex-1 rounded-xl border border-[#ded9d3] bg-white px-3 outline-none focus:border-[#E8A020]"
+                        className="h-9 flex-1 rounded-xl border border-[#ded9d3] bg-white px-3 text-sm outline-none focus:border-[#E8A020]"
                       />
-
                       <button
                         type="button"
                         onClick={() => {
@@ -911,12 +896,11 @@ const handleConfirmPayment = async (payments) => {
                           setDiscountAmount(nextDiscount);
                           setShowDiscountEditor(false);
                         }}
-                        className="rounded-xl bg-[#E8A020] px-4 font-bold text-white"
+                        className="rounded-xl bg-[#E8A020] px-3 text-sm font-bold text-white"
                       >
                         Save
                       </button>
                     </div>
-
                     {discountAmount > 0 && (
                       <button
                         type="button"
@@ -925,7 +909,7 @@ const handleConfirmPayment = async (payments) => {
                           setDiscountInput("");
                           setShowDiscountEditor(false);
                         }}
-                        className="mt-2 text-sm font-bold text-red-600"
+                        className="mt-1.5 text-xs font-bold text-red-600"
                       >
                         Remove discount
                       </button>
@@ -933,36 +917,42 @@ const handleConfirmPayment = async (payments) => {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between border-t border-dashed border-[#ded9d3] pt-4">
-                  <span className="text-2xl font-bold">Total</span>
-                  <span className="text-4xl font-extrabold text-[#3d0c02]">
+                {/* Total */}
+                <div className="flex items-center justify-between border-t border-dashed border-[#ded9d3] pt-2">
+                  <span className="text-base font-bold">Total</span>
+                  <span className="text-2xl font-extrabold text-[#3d0c02]">
                     ₹{formatMoney(total)}
                   </span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4">
+              {/* Action buttons */}
+              <div className="flex flex-col gap-2">
+                {/* Print KOT */}
                 <button
                   type="button"
                   onClick={handlePrintKOT}
                   disabled={(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading}
-                  className={`flex h-[64px] w-full items-center justify-center gap-3 rounded-xl border-2 text-xl font-bold ${(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading
-                    ? "cursor-not-allowed border-gray-300 text-gray-400"
-                    : "border-[#3d0c02] text-[#3d0c02]"
-                    }`}
+                  className={`flex h-10 w-full items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold ${
+                    (cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading
+                      ? "cursor-not-allowed border-gray-300 text-gray-400"
+                      : "border-[#3d0c02] text-[#3d0c02]"
+                  }`}
                 >
                   {kotLoading ? "Printing KOT..." : "Print KOT"}
                 </button>
 
-                <div className="flex h-[72px] gap-3">
+                {/* Collect Payment + Save */}
+                <div className="flex h-12 gap-2">
                   <button
                     type="button"
                     onClick={() => setShowPaymentModal(true)}
                     disabled={cartItems.length === 0}
-                    className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cartItems.length === 0
-                      ? "cursor-not-allowed bg-gray-300"
-                      : "bg-[#E8A020]"
-                      }`}
+                    className={`flex-1 rounded-xl text-sm font-extrabold text-white shadow-lg ${
+                      cartItems.length === 0
+                        ? "cursor-not-allowed bg-gray-300"
+                        : "bg-[#E8A020]"
+                    }`}
                   >
                     Collect Payment
                   </button>
@@ -971,10 +961,11 @@ const handleConfirmPayment = async (payments) => {
                     type="button"
                     onClick={handleSaveOrder}
                     disabled={cartItems.length === 0 || saveLoading}
-                    className={`flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${cartItems.length === 0 || saveLoading
-                      ? "cursor-not-allowed bg-gray-300"
-                      : "bg-green-600"
-                      }`}
+                    className={`flex-1 rounded-xl text-sm font-extrabold text-white shadow-lg ${
+                      cartItems.length === 0 || saveLoading
+                        ? "cursor-not-allowed bg-gray-300"
+                        : "bg-green-600"
+                    }`}
                   >
                     {saveLoading ? "Saving..." : "Save"}
                   </button>
@@ -984,6 +975,7 @@ const handleConfirmPayment = async (payments) => {
           </section>
         </main>
 
+        {/* ── Close Sale Modal ── */}
         {showCloseSaleModal && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#3a0a01]/60 p-4">
             <div className="w-full max-w-[640px] rounded-2xl border border-[#ded9d3] bg-[#fef9f2] shadow-2xl">
@@ -1059,7 +1051,6 @@ const handleConfirmPayment = async (payments) => {
                             placeholder="Category name"
                             className="rounded-xl border border-[#ded9d3] bg-white px-3 py-3 outline-none focus:border-[#E8A020]"
                           />
-
                           <input
                             type="number"
                             min="0"
@@ -1071,7 +1062,6 @@ const handleConfirmPayment = async (payments) => {
                             placeholder="Amount"
                             className="rounded-xl border border-[#ded9d3] bg-white px-3 py-3 outline-none focus:border-[#E8A020]"
                           />
-
                           <input
                             type="text"
                             value={expense.note}
@@ -1117,10 +1107,11 @@ const handleConfirmPayment = async (payments) => {
                     type="button"
                     onClick={handleConfirmCloseSale}
                     disabled={closeLoading}
-                    className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${closeLoading
-                      ? "cursor-not-allowed bg-gray-400"
-                      : "bg-red-600"
-                      }`}
+                    className={`h-14 flex-1 rounded-xl text-lg font-extrabold text-white shadow-lg ${
+                      closeLoading
+                        ? "cursor-not-allowed bg-gray-400"
+                        : "bg-red-600"
+                    }`}
                   >
                     {closeLoading ? "Closing..." : "Confirm & Close Sale"}
                   </button>
@@ -1130,22 +1121,25 @@ const handleConfirmPayment = async (payments) => {
           </div>
         )}
 
+        {/* ── Toast ── */}
         {toast ? (
           <div className="pointer-events-none fixed right-6 top-20 z-[200]">
             <div
-              className={`pointer-events-auto min-w-[320px] max-w-[420px] rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur-sm transition-all ${toast.type === "success"
-                ? "border-emerald-200 bg-white text-[#3d0c02]"
-                : "border-red-200 bg-white text-[#3d0c02]"
-                }`}
+              className={`pointer-events-auto min-w-[320px] max-w-[420px] rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur-sm transition-all ${
+                toast.type === "success"
+                  ? "border-emerald-200 bg-white text-[#3d0c02]"
+                  : "border-red-200 bg-white text-[#3d0c02]"
+              }`}
             >
               <div className="flex items-start gap-3">
                 <div
-                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${toast.type === "success"
-                    ? "bg-emerald-100 text-emerald-600"
-                    : "bg-red-100 text-red-600"
-                    }`}
+                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                    toast.type === "success"
+                      ? "bg-emerald-100 text-emerald-600"
+                      : "bg-red-100 text-red-600"
+                  }`}
                 >
-                  {toast.type === "success" ? "✓" : "!"}
+                  {toast.type === "success" ? "✓" : "✕"}
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -1164,8 +1158,10 @@ const handleConfirmPayment = async (payments) => {
 
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#f3eee8]">
                 <div
-                  className={`h-full animate-[toastShrink_3s_linear_forwards] rounded-full ${toast.type === "success" ? "bg-emerald-500" : "bg-red-500"
-                    }`}
+                  className={`h-full rounded-full ${
+                    toast.type === "success" ? "bg-emerald-500" : "bg-red-500"
+                  }`}
+                  style={{ animation: "toastShrink 3s linear forwards" }}
                 />
               </div>
             </div>
