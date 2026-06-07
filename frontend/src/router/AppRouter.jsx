@@ -7,7 +7,7 @@ import OrdersPage from "../pages/OrdersPage";
 import SettingsPage from "../pages/SettingsPage";
 import PageLoader from "../components/ui/PageLoader";
 import ChangePasswordPage from "../pages/ChangePasswordPage";
-
+import MenuManagementPage from "../pages/MenuManagementPage";
 import { useAuthStore } from "../store/authStore";
 
 function ProtectedRoute({ children }) {
@@ -60,6 +60,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/items"
+        element={
+          <ProtectedRoute>
+            <MenuManagementPage />
           </ProtectedRoute>
         }
       />

@@ -124,17 +124,37 @@ function POSPage() {
     }
   }, [cartItems, orderType, orderNote, discountAmount]);
 
-  const visibleProducts = useMemo(() => {
-    if (searchQuery.trim()) {
-      return categories.flatMap((cat) =>
-        cat.products.filter((p) =>
-          p.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
-        )
-      );
-    }
-    const selectedCat = categories.find((cat) => cat.id === selectedCategoryId);
-    return selectedCat ? selectedCat.products : [];
-  }, [categories, selectedCategoryId, searchQuery]);
+const visibleCategories = useMemo(
+  () =>
+    (categories || [])
+      .filter((category) => category.isActive !== false)
+      .map((category) => ({
+        ...category,
+        products: (category.products || []).filter(
+          (item) => item.isActive !== false
+        ),
+      }))
+      .filter((category) => category.products.length > 0),
+  [categories]
+);
+
+const visibleProducts = useMemo(() => {
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+
+  const selectedCategory = visibleCategories.find(
+    (category) => category.id === selectedCategoryId
+  );
+
+  if (!selectedCategory) return [];
+
+  return (selectedCategory.products || []).filter((product) => {
+    if (!normalizedSearch) return true;
+
+    return [product.name, product.description]
+      .filter(Boolean)
+      .some((value) => value.toLowerCase().includes(normalizedSearch));
+  });
+}, [visibleCategories, selectedCategoryId, searchQuery]);
 
   const cartQtyMap = useMemo(() => {
     const map = {};

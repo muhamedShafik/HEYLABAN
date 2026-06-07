@@ -81,7 +81,7 @@ function SettingsPage() {
               tags={["Sweets", "Namkeen", "Drinks"]}
               buttonLabel="Manage Menu"
               buttonType="button"
-              onClick={() => {}}
+              onClick={() => navigate("/settings/items")}
             />
           </div>
 
