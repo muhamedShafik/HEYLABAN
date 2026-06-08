@@ -25,3 +25,12 @@ export async function cancelOrder(orderId, payload) {
   const response = await api.post(`/api/orders/${orderId}/cancel`, payload);
   return response.data.data;
 }
+
+/**
+ * Creates an order AND a KOT in a single API call.
+ * Returns { order, kot } in one response.
+ */
+export async function createOrderWithKot(payload) {
+  const response = await api.post("/api/orders/create-with-kot", payload);
+  return response.data.data;
+}

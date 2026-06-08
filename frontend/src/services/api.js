@@ -101,7 +101,7 @@ import { useAuthStore } from "../store/authStore";
 
 
 const API_BASE_URL =
-   "https://2l3t23t3-8000.inc1.devtunnels.ms/";
+   "http://localhost:8000";
 
 
 const api = axios.create({

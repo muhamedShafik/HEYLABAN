@@ -26,8 +26,7 @@ const formatPayload = (printType, orderData, kotData = null) => {
     summary: (() => {
       const totalAmount = Number(orderData.totalAmount || 0);
 
-      // Compute totalPaid from the payments array (most reliable source of truth)
-      // Fall back to the totalPaid field if no payments array exists
+    
       const paymentsArray = orderData.payments || [];
       const paidFromPayments = paymentsArray.reduce(
         (sum, p) => sum + Number(p.amount || 0), 0
@@ -100,16 +99,12 @@ export const sendPrintMessage = (actionType, printType, orderData, kotData = nul
   }
 };
 
-/**
- * Sends a request to print only the KOT.
- */
+
 export const printKOT = (kotData, orderData) => {
   sendPrintMessage("PRINT_KOT", "KOT", orderData, kotData);
 };
 
-/**
- * Sends a request to print only the bill.
- */
+
 export const printBill = (orderData) => {
   sendPrintMessage("PRINT_BILL", "BILL", orderData, null);
 };

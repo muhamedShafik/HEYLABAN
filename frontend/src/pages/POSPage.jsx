@@ -6,7 +6,7 @@ import PaymentModal from "../components/pos/PaymentModal";
 import { useCartStore } from "../store/cartStore";
 import { useSessionStore } from "../store/sessionStore";
 import { fetchCatalogue } from "../services/catalogueService";
-import { createOrder, updateOrder } from "../services/orderService";
+import { createOrder, updateOrder, createOrderWithKot } from "../services/orderService";
 import { createKot } from "../services/kotService";
 import { createOrderPayment } from "../services/paymentService";
 import { useQueryClient } from "@tanstack/react-query";
@@ -382,25 +382,51 @@ function POSPage() {
 
     try {
       setKotLoading(true);
-      const order = await ensureOrderForCart();
-      const kot = await createKot(order.id, {
-        note: orderNote.trim() || null,
-      });
+
+      let order, kot;
+
+      if (!lastSavedOrder?.id) {
+        // ── NEW ORDER: Single API call creates both order + KOT ──
+        const payload = {
+          ...buildOrderPayload(),
+          kotNote: orderNote.trim() || null,
+        };
+        const result = await createOrderWithKot(payload);
+        order = result.order;
+        kot = result.kot;
+      } else if (isCartDirty) {
+        // ── EDITED ORDER: Update order first, then create KOT ──
+        order = await ensureOrderForCart();
+        kot = await createKot(order.id, {
+          note: orderNote.trim() || null,
+        });
+      } else {
+        // ── REPRINT: Order unchanged, just create KOT (1 API call) ──
+        order = lastSavedOrder;
+        kot = await createKot(order.id, {
+          note: orderNote.trim() || null,
+        });
+      }
+
+      // Fire print IMMEDIATELY
+      printBoth(kot, order);
+
+      // Update UI state
       setLastSavedOrder(order);
       setLastKot(kot);
       setIsCartDirty(false);
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      if (order?.id) {
-        queryClient.invalidateQueries({ queryKey: ["order", order.id] });
-      }
+
       showToast({
         type: "success",
         title: kot.status === "REPRINTED" ? "KOT reprinted" : "KOT printed",
         message: `${kot.kotNo} • Times printed: ${kot.timesPrinted}`,
       });
 
-      // Send message to RN app to print both
-      printBoth(kot, order);
+      // Background cache refresh
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      if (order?.id) {
+        queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+      }
     } catch (err) {
       const message =
         err?.response?.data?.message || err?.message || "Failed to print KOT.";
