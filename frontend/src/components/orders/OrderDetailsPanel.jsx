@@ -44,6 +44,7 @@ function OrderDetailsPanel({
   onGoToCart,
   onCompletePayment,
   onPrintKot,
+  onPrintBill,
   onCancelOrder,
   actionLoading,
 }) {
@@ -155,6 +156,18 @@ function OrderDetailsPanel({
         >
           {kotLabel}
         </button>
+         <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onPrintBill && onPrintBill(order)}
+          className={`rounded-xl px-4 py-2 text-sm font-bold ${
+            !canKot || actionLoading
+              ? "cursor-not-allowed border border-[#ded9d3] bg-gray-100 text-gray-400"
+              : "border border-[#ded9d3] bg-white text-[#3d0c02] hover:bg-[#f8f3ec]"
+          }`}
+        >
+          Print Bill
+        </button>
 
         {!isCancelled && (
           <button
@@ -163,7 +176,7 @@ function OrderDetailsPanel({
             onClick={() => onCancelOrder(order)}
             className={`rounded-xl px-4 py-2 text-sm font-bold ${
               !canCancel || actionLoading
-                ? "cursor-not-allowed border border-[#ded9d3] bg-gray-100 text-gray-400"
+                ? "cursor-not-allowed borer border-[#ded9d3] bg-gray-100 text-gray-400"
                 : "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
             }`}
           >

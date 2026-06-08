@@ -67,12 +67,12 @@ function SettingsPage() {
             />
 
             <SettingsCard
-              title="Summary"
-              description="Review order and sales summaries for full accountability."
-              icon="🧾"
-              tags={["Open", "Completed", "Due", "Cancelled"]}
-              onClick={() => {}}
-            />
+  title="Summary"
+  description="Review order and sales summaries for full accountability."
+  icon="🧾"
+  tags={["Open", "Completed", "Due", "Cancelled"]}
+  onClick={() => navigate("/summary")}
+/>
 
             <SettingsCard
               title="Add Items"

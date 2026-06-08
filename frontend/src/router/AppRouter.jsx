@@ -9,6 +9,7 @@ import PageLoader from "../components/ui/PageLoader";
 import ChangePasswordPage from "../pages/ChangePasswordPage";
 import MenuManagementPage from "../pages/MenuManagementPage";
 import { useAuthStore } from "../store/authStore";
+import SummaryPage from "../pages/SummaryPage";
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isAuthLoading } = useAuthStore();
@@ -63,6 +64,14 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route
+  path="/summary"
+  element={
+    <ProtectedRoute>
+      <SummaryPage />
+    </ProtectedRoute>
+  }
+/>
       <Route
         path="/settings/items"
         element={

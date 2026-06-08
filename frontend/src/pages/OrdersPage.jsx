@@ -13,6 +13,7 @@ import OrdersFilters from "../components/orders/OrdersFilters";
 import OrdersList from "../components/orders/OrdersList";
 import OrderDetailsPanel from "../components/orders/OrderDetailsPanel";
 import { useCartStore } from "../store/cartStore";
+import { printKOT, printBill } from "../utils/printHelpers";
 
 function OrdersPage() {
   const navigate = useNavigate();
@@ -178,13 +179,20 @@ function OrdersPage() {
     if (order.status === "CANCELLED") return;
     setActionState({ orderId: order.id, type: "kot" });
     try {
-      await printKotMutation.mutateAsync({
+      const kot = await printKotMutation.mutateAsync({
         orderId: order.id,
         note: order.note || null,
       });
+      // Send message to RN app to print KOT
+      printKOT(kot, order);
     } finally {
       setActionState({ orderId: null, type: "" });
     }
+  };
+
+  const handlePrintBill = (order) => {
+    if (order.status === "CANCELLED") return;
+    printBill(order);
   };
 
   // ─── Cancel Order ─────────────────────────────────────────────────────────
@@ -279,6 +287,7 @@ function OrdersPage() {
             onGoToCart={handleGoToCart}
             onCompletePayment={handleCompletePayment}
             onPrintKot={handlePrintKot}
+            onPrintBill={handlePrintBill}
             onCancelOrder={handleCancelOrderClick}
             actionLoading={!!actionState.orderId}
           />

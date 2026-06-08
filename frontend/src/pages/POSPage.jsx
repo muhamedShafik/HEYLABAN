@@ -12,7 +12,9 @@ import { createOrderPayment } from "../services/paymentService";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "../hooks/orders/useDebouncedValue";
 import { useTicketSearchQuery } from "../hooks/orders/useTicketSearchQuery";
-import OrdersSearchDropdown from "../components/orders/OrdersSearchDropdown"
+import OrdersSearchDropdown from "../components/orders/OrdersSearchDropdown";
+import { printBoth } from "../utils/printHelpers";
+
 function POSPage() {
   const navigate = useNavigate();
 
@@ -66,7 +68,11 @@ function POSPage() {
   const currentOrderNo = useCartStore((state) => state.currentOrderNo);
   const clearCurrentOrder = useCartStore((state) => state.clearCurrentOrder);
 
-  const { data: categories = [], isLoading, isError } = useQuery({
+  const {
+    data: categories = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["catalogue"],
     queryFn: fetchCatalogue,
     staleTime: 5 * 60 * 1000,
@@ -124,37 +130,37 @@ function POSPage() {
     }
   }, [cartItems, orderType, orderNote, discountAmount]);
 
-const visibleCategories = useMemo(
-  () =>
-    (categories || [])
-      .filter((category) => category.isActive !== false)
-      .map((category) => ({
-        ...category,
-        products: (category.products || []).filter(
-          (item) => item.isActive !== false
-        ),
-      }))
-      .filter((category) => category.products.length > 0),
-  [categories]
-);
-
-const visibleProducts = useMemo(() => {
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-
-  const selectedCategory = visibleCategories.find(
-    (category) => category.id === selectedCategoryId
+  const visibleCategories = useMemo(
+    () =>
+      (categories || [])
+        .filter((category) => category.isActive !== false)
+        .map((category) => ({
+          ...category,
+          products: (category.products || []).filter(
+            (item) => item.isActive !== false,
+          ),
+        }))
+        .filter((category) => category.products.length > 0),
+    [categories],
   );
 
-  if (!selectedCategory) return [];
+  const visibleProducts = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  return (selectedCategory.products || []).filter((product) => {
-    if (!normalizedSearch) return true;
+    const selectedCategory = visibleCategories.find(
+      (category) => category.id === selectedCategoryId,
+    );
 
-    return [product.name, product.description]
-      .filter(Boolean)
-      .some((value) => value.toLowerCase().includes(normalizedSearch));
-  });
-}, [visibleCategories, selectedCategoryId, searchQuery]);
+    if (!selectedCategory) return [];
+
+    return (selectedCategory.products || []).filter((product) => {
+      if (!normalizedSearch) return true;
+
+      return [product.name, product.description]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+  }, [visibleCategories, selectedCategoryId, searchQuery]);
 
   const cartQtyMap = useMemo(() => {
     const map = {};
@@ -200,8 +206,8 @@ const visibleProducts = useMemo(() => {
   const handleExpenseChange = (index, field, value) => {
     setExpenses((prev) =>
       prev.map((expense, i) =>
-        i === index ? { ...expense, [field]: value } : expense
-      )
+        i === index ? { ...expense, [field]: value } : expense,
+      ),
     );
   };
 
@@ -216,8 +222,8 @@ const visibleProducts = useMemo(() => {
   };
 
   const shouldClearCartOnLeave = () => {
-  return !!lastSavedOrder?.id || !!currentOrderId || !!lastKot?.id;
-};
+    return !!lastSavedOrder?.id || !!currentOrderId || !!lastKot?.id;
+  };
 
   const resetCloseModal = () => {
     setClosingNote("");
@@ -239,7 +245,7 @@ const visibleProducts = useMemo(() => {
         (expense) =>
           expense.categoryName !== "" ||
           expense.amount !== "" ||
-          expense.note !== null
+          expense.note !== null,
       );
 
     for (const expense of cleanedExpenses) {
@@ -253,7 +259,7 @@ const visibleProducts = useMemo(() => {
         expense.amount < 0
       ) {
         setCloseError(
-          `Valid amount is required for ${expense.categoryName || "expense"}.`
+          `Valid amount is required for ${expense.categoryName || "expense"}.`,
         );
         return;
       }
@@ -392,6 +398,9 @@ const visibleProducts = useMemo(() => {
         title: kot.status === "REPRINTED" ? "KOT reprinted" : "KOT printed",
         message: `${kot.kotNo} • Times printed: ${kot.timesPrinted}`,
       });
+
+      // Send message to RN app to print both
+      printBoth(kot, order);
     } catch (err) {
       const message =
         err?.response?.data?.message || err?.message || "Failed to print KOT.";
@@ -462,18 +471,28 @@ const visibleProducts = useMemo(() => {
   const debouncedOrder = useDebouncedValue(orderSearch, 300);
   const debouncedKot = useDebouncedValue(kotSearch, 300);
 
-  const normalizedOrderQuery =
-    debouncedOrder.trim().toUpperCase().startsWith("ORD-")
-      ? debouncedOrder.trim().toUpperCase()
-      : "";
+  const normalizedOrderQuery = debouncedOrder
+    .trim()
+    .toUpperCase()
+    .startsWith("ORD-")
+    ? debouncedOrder.trim().toUpperCase()
+    : "";
 
-  const normalizedKotQuery =
-    debouncedKot.trim().toUpperCase().startsWith("KOT-")
-      ? debouncedKot.trim().toUpperCase()
-      : "";
+  const normalizedKotQuery = debouncedKot
+    .trim()
+    .toUpperCase()
+    .startsWith("KOT-")
+    ? debouncedKot.trim().toUpperCase()
+    : "";
 
-  const orderSearchQuery = useTicketSearchQuery(normalizedOrderQuery, !!normalizedOrderQuery);
-  const kotSearchQuery = useTicketSearchQuery(normalizedKotQuery, !!normalizedKotQuery);
+  const orderSearchQuery = useTicketSearchQuery(
+    normalizedOrderQuery,
+    !!normalizedOrderQuery,
+  );
+  const kotSearchQuery = useTicketSearchQuery(
+    normalizedKotQuery,
+    !!normalizedKotQuery,
+  );
 
   const handleTicketSelect = (result) => {
     const params = new URLSearchParams({
@@ -498,33 +517,33 @@ const visibleProducts = useMemo(() => {
 
   const queryClient = useQueryClient();
 
-const goToOrdersPage = () => {
-  const params = new URLSearchParams({
-    page: 1,
-    limit: 20,
-    sortBy: "createdAt",
-    sortDir: "DESC",
-  });
+  const goToOrdersPage = () => {
+    const params = new URLSearchParams({
+      page: 1,
+      limit: 20,
+      sortBy: "createdAt",
+      sortDir: "DESC",
+    });
 
-  if (lastSavedOrder?.id) {
-    params.set("selectedOrderId", lastSavedOrder.id);
-    params.set("selectedOrderNo", lastSavedOrder.orderNo);
-  }
+    if (lastSavedOrder?.id) {
+      params.set("selectedOrderId", lastSavedOrder.id);
+      params.set("selectedOrderNo", lastSavedOrder.orderNo);
+    }
 
-  if (shouldClearCartOnLeave()) {
-    resetCurrentOrderFlow();
-  }
+    if (shouldClearCartOnLeave()) {
+      resetCurrentOrderFlow();
+    }
 
-  navigate(`/orders?${params.toString()}`);
-};
+    navigate(`/orders?${params.toString()}`);
+  };
 
- const goToSettingsPage = () => {
-  if (shouldClearCartOnLeave()) {
-    resetCurrentOrderFlow();
-  }
+  const goToSettingsPage = () => {
+    if (shouldClearCartOnLeave()) {
+      resetCurrentOrderFlow();
+    }
 
-  navigate("/settings");
-};
+    navigate("/settings");
+  };
 
   return (
     <>
@@ -595,7 +614,13 @@ const goToOrdersPage = () => {
               </span>
             )}
 
-            <button type="button" className="opacity-80">↺</button>
+            <button
+              type="button"
+              className="opacity-80"
+              onClick={() => window.location.reload()}
+            >
+              ↺
+            </button>
 
             <button
               type="button"
@@ -607,7 +632,9 @@ const goToOrdersPage = () => {
               ⚙
             </button>
 
-            <button type="button" className="opacity-80">👤</button>
+            <button type="button" className="opacity-80">
+              👤
+            </button>
 
             <button
               type="button"
@@ -642,32 +669,30 @@ const goToOrdersPage = () => {
 
             <nav className="bg-white/50 p-4">
               <div className="flex gap-3 overflow-x-auto">
-                {isLoading ? (
-                  [1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className="h-11 w-28 animate-pulse rounded-full bg-[#ece7e1]"
-                    />
-                  ))
-                ) : (
-                  categories.map((category) => (
-                    <button
-                      type="button"
-                      key={category.id}
-                      onClick={() => {
-                        setSelectedCategoryId(category.id);
-                        setSearchQuery("");
-                      }}
-                      className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${
-                        selectedCategoryId === category.id
-                          ? "bg-[#E8A020] text-white shadow-md"
-                          : "border border-[#ded9d3] bg-white text-[#3d0c02]"
-                      }`}
-                    >
-                      {category.name}
-                    </button>
-                  ))
-                )}
+                {isLoading
+                  ? [1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        className="h-11 w-28 animate-pulse rounded-full bg-[#ece7e1]"
+                      />
+                    ))
+                  : categories.map((category) => (
+                      <button
+                        type="button"
+                        key={category.id}
+                        onClick={() => {
+                          setSelectedCategoryId(category.id);
+                          setSearchQuery("");
+                        }}
+                        className={`flex min-h-[44px] min-w-[96px] max-w-[140px] items-center justify-center rounded-full px-4 py-2 text-center text-sm font-semibold leading-tight break-words ${
+                          selectedCategoryId === category.id
+                            ? "bg-[#E8A020] text-white shadow-md"
+                            : "border border-[#ded9d3] bg-white text-[#3d0c02]"
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
               </div>
             </nav>
 
@@ -863,7 +888,9 @@ const goToOrdersPage = () => {
                 {/* Order type row */}
                 <div className="flex justify-between text-xs">
                   <span className="opacity-70">Order Type</span>
-                  <span className="font-bold">{orderType.replace("_", " ")}</span>
+                  <span className="font-bold">
+                    {orderType.replace("_", " ")}
+                  </span>
                 </div>
 
                 {/* Subtotal */}
@@ -911,7 +938,7 @@ const goToOrdersPage = () => {
                         onClick={() => {
                           const nextDiscount = Math.min(
                             Number(discountInput || 0),
-                            Number(subtotal || 0)
+                            Number(subtotal || 0),
                           );
                           setDiscountAmount(nextDiscount);
                           setShowDiscountEditor(false);
@@ -952,9 +979,13 @@ const goToOrdersPage = () => {
                 <button
                   type="button"
                   onClick={handlePrintKOT}
-                  disabled={(cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading}
+                  disabled={
+                    (cartItems.length === 0 && !lastSavedOrder?.id) ||
+                    kotLoading
+                  }
                   className={`flex h-10 w-full items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold ${
-                    (cartItems.length === 0 && !lastSavedOrder?.id) || kotLoading
+                    (cartItems.length === 0 && !lastSavedOrder?.id) ||
+                    kotLoading
                       ? "cursor-not-allowed border-gray-300 text-gray-400"
                       : "border-[#3d0c02] text-[#3d0c02]"
                   }`}
@@ -1012,7 +1043,9 @@ const goToOrdersPage = () => {
                 <div className="space-y-3 rounded-xl border border-[#ded9d3]/50 bg-[#f8f3ec] p-4">
                   <div className="flex justify-between">
                     <span>Session Status</span>
-                    <span className="font-bold">{todaySession?.status || "-"}</span>
+                    <span className="font-bold">
+                      {todaySession?.status || "-"}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Opening Cash</span>
@@ -1066,7 +1099,11 @@ const goToOrdersPage = () => {
                             type="text"
                             value={expense.categoryName}
                             onChange={(e) =>
-                              handleExpenseChange(index, "categoryName", e.target.value)
+                              handleExpenseChange(
+                                index,
+                                "categoryName",
+                                e.target.value,
+                              )
                             }
                             placeholder="Category name"
                             className="rounded-xl border border-[#ded9d3] bg-white px-3 py-3 outline-none focus:border-[#E8A020]"
@@ -1077,7 +1114,11 @@ const goToOrdersPage = () => {
                             step="0.01"
                             value={expense.amount}
                             onChange={(e) =>
-                              handleExpenseChange(index, "amount", e.target.value)
+                              handleExpenseChange(
+                                index,
+                                "amount",
+                                e.target.value,
+                              )
                             }
                             placeholder="Amount"
                             className="rounded-xl border border-[#ded9d3] bg-white px-3 py-3 outline-none focus:border-[#E8A020]"
