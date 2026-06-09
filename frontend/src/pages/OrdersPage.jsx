@@ -175,26 +175,33 @@ function OrdersPage() {
     },
   });
 
-  const handlePrintKot = async (order) => {
-    if (order.status === "CANCELLED") return;
-    setActionState({ orderId: order.id, type: "kot" });
-    try {
-      const kot = await printKotMutation.mutateAsync({
-        orderId: order.id,
-        note: order.note || null,
-      });
-      // Send message to RN app to print KOT
-      printKOT(kot, order);
-    } finally {
-      setActionState({ orderId: null, type: "" });
-    }
-  };
+ const handlePrintKot = async (order) => {
+  setActionState({ orderId: order.id, type: "kot" });
+  try {
+    // Always fetch the full order detail for printing
+    const fullOrder =
+      selectedOrderQuery.data?.id === order.id
+        ? selectedOrderQuery.data
+        : await fetchOrderById(order.id);
 
-  const handlePrintBill = (order) => {
-    if (order.status === "CANCELLED") return;
-    printBill(order);
-  };
+    const kot = await printKotMutation.mutateAsync({
+      orderId: order.id,
+      note: fullOrder.note || null,
+    });
+    printKOT(kot, fullOrder); // ← pass fullOrder, not order
+  } finally {
+    setActionState({ orderId: null, type: "" });
+  }
+};
 
+const handlePrintBill = async (order) => {
+  if (order.status === "CANCELLED") return;
+  const fullOrder =
+    selectedOrderQuery.data?.id === order.id
+      ? selectedOrderQuery.data
+      : await fetchOrderById(order.id);
+  printBill(fullOrder);
+};
   // ─── Cancel Order ─────────────────────────────────────────────────────────
   const cancelMutation = useMutation({
     mutationFn: ({ orderId, payload }) => cancelOrder(orderId, payload),

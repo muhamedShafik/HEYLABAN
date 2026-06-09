@@ -2,12 +2,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { useSessionStore } from "../store/sessionStore";
 
 function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
-  const fetchTodaySession = useSessionStore((state) => state.fetchTodaySession);
 
   const [form, setForm] = useState({
     email: "",
@@ -37,13 +35,9 @@ function LoginPage() {
         return;
       }
 
-      const session = await fetchTodaySession();
-
-      if (session?.status === "OPEN") {
-        navigate("/pos", { replace: true });
-      } else {
-        navigate("/open-sales", { replace: true });
-      }
+      // Go straight to POS — the session middleware will redirect
+      // to /open-sales only when the user tries an action that needs a session.
+      navigate("/pos", { replace: true });
     } catch (err) {
       const message =
         err?.response?.data?.message || "Invalid email or password";

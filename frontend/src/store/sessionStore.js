@@ -22,22 +22,10 @@ export const useSessionStore = create((set) => ({
       set({ todaySession: session, isSessionChecked: true });
       return session;
     } catch (error) {
-      const status = error?.response?.status;
-      const message = error?.response?.data?.message || "";
-
-      const shouldGoToOpenSales =
-        status === 404 ||
-        status === 409 ||
-        message.includes("not opened") ||
-        message.includes("already closed") ||
-        message.includes("No sales session found for today");
-
-      if (shouldGoToOpenSales) {
-        set({ todaySession: null, isSessionChecked: true });
-        return null;
-      }
-
-      throw error;
+      // Session doesn't exist or is closed — that's fine,
+      // the middleware on order/kot/payment endpoints will enforce access.
+      set({ todaySession: null, isSessionChecked: true });
+      return null;
     }
   },
 
@@ -66,7 +54,7 @@ export const useSessionStore = create((set) => ({
 
   closeSession: async (payload) => {
     const session = await closeTodaySalesSession(payload);
-    set({ todaySession: session, isSessionChecked: true });
+    set({ todaySession: null, isSessionChecked: true });
     return session;
   },
 }));
